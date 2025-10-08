@@ -18,19 +18,21 @@ export default async function handler(req, res) {
 
     const userId = session.user.id
 
-    console.log('🔍 Finding recordings without userId or with anonymous userId...')
+    console.log('🔍 Finding ALL recordings...')
 
-    // Find all recordings without userId or with anonymous
+    // Get ALL recordings
     const recordingsRef = collection(db, 'meetings')
-    const q1 = query(recordingsRef, where('userId', '==', 'anonymous'))
-    const q2 = query(recordingsRef, where('userId', '==', null))
+    const allSnapshot = await getDocs(recordingsRef)
 
-    const snapshot1 = await getDocs(q1)
-    const snapshot2 = await getDocs(q2)
+    console.log(`📝 Found ${allSnapshot.size} total recordings`)
 
-    const allDocs = [...snapshot1.docs, ...snapshot2.docs]
+    // Filter to only recordings that don't belong to current user
+    const allDocs = allSnapshot.docs.filter(doc => {
+      const data = doc.data()
+      return !data.userId || data.userId === 'anonymous' || data.userId !== userId
+    })
 
-    console.log(`📝 Found ${allDocs.length} recordings to claim`)
+    console.log(`📝 Found ${allDocs.length} recordings to claim (excluding ones already owned)`)
 
     // Update each recording to assign to current user
     let updated = 0
