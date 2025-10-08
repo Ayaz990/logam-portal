@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
+import { useSession, signOut } from 'next-auth/react'
+import { useRouter } from 'next/router'
 import Head from 'next/head'
 import {
   Home,
@@ -23,6 +25,15 @@ import {
 } from 'lucide-react'
 
 export default function Dashboard() {
+  const { data: session, status } = useSession()
+  const router = useRouter()
+
+  // Redirect to sign in if not authenticated
+  useEffect(() => {
+    if (status === 'unauthenticated') {
+      router.push('/auth/signin')
+    }
+  }, [status, router])
   const [recordings, setRecordings] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -185,6 +196,23 @@ export default function Dashboard() {
 
   console.log('🔍 Filtered recordings:', filteredRecordings.length, 'out of', recordings.length)
 
+  // Show loading while checking authentication
+  if (status === 'loading') {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="inline-block w-8 h-8 border-4 border-black/20 border-t-black rounded-full animate-spin mb-4" />
+          <p className="text-black/60">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Don't render if not authenticated (redirect will happen)
+  if (!session) {
+    return null
+  }
+
   return (
     <>
       <Head>
@@ -280,7 +308,7 @@ export default function Dashboard() {
             </div>
 
             <button
-              onClick={() => window.location.href = '/auth/signout'}
+              onClick={() => signOut({ callbackUrl: '/' })}
               className="flex items-center gap-2 px-4 py-2 bg-black text-white hover:bg-black/90 rounded-lg transition"
             >
               <LogOut size={18} />
