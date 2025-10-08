@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body {
+      width: 300px;
+      padding: 20px;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      margin: 0;
+      background: #ffffff;
+      color: #000000;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    .logo {
+      width: 48px;
+      height: 48px;
+      background: #000000;
+      border-radius: 50%;
+      margin: 0 auto 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 24px;
+    }
+
+    h1 {
+      font-size: 18px;
+      margin: 0;
+      color: #000000;
+    }
+
+    .status {
+      text-align: center;
+      padding: 15px;
+      background: #f5f5f5;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      color: #000000;
+    }
+
+    .status.recording {
+      background: #ffffff;
+      border: 1px solid #000000;
+      color: #000000;
+    }
+
+    .status.ready {
+      background: #ffffff;
+      border: 1px solid #000000;
+      color: #000000;
+    }
+
+    .buttons {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    button {
+      padding: 12px 20px;
+      border: 1px solid #000000;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      transition: all 0.2s;
+    }
+
+    .primary {
+      background: #000000;
+      color: #ffffff;
+    }
+
+    .primary:hover {
+      background: #333333;
+    }
+
+    .secondary {
+      background: #ffffff;
+      color: #000000;
+      border: 1px solid #000000;
+    }
+
+    .secondary:hover {
+      background: #f5f5f5;
+    }
+
+    .info {
+      font-size: 12px;
+      color: #666666;
+      text-align: center;
+      margin-top: 15px;
+      line-height: 1.4;
+    }
+
+    .link {
+      color: #000000;
+      text-decoration: underline;
+    }
+
+    .link:hover {
+      color: #333333;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      body {
+        background: #000000;
+        color: #ffffff;
+      }
+
+      h1 {
+        color: #ffffff;
+      }
+
+      .logo {
+        background: #ffffff;
+        color: #000000;
+      }
+
+      .status {
+        background: #000000;
+        border: 1px solid #ffffff;
+        color: #ffffff;
+      }
+
+      .status.recording,
+      .status.ready {
+        background: #000000;
+        border: 1px solid #ffffff;
+        color: #ffffff;
+      }
+
+      .primary {
+        background: #ffffff;
+        color: #000000;
+        border: 1px solid #ffffff;
+      }
+
+      .primary:hover {
+        background: #e0e0e0;
+      }
+
+      .secondary {
+        background: #000000;
+        color: #ffffff;
+        border: 1px solid #ffffff;
+      }
+
+      .secondary:hover {
+        background: #333333;
+      }
+
+      .info {
+        color: #cccccc;
+      }
+
+      .link {
+        color: #ffffff;
+      }
+
+      .link:hover {
+        color: #cccccc;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo">📹</div>
+    <h1>Meet Recorder</h1>
+  </div>
+
+  <div id="status" class="status ready">
+    <div id="statusText">Ready to record</div>
+  </div>
+
+  <div class="buttons">
+    <button id="openDashboard" class="primary">
+      Open Dashboard
+    </button>
+    <button id="openMeet" class="secondary">
+      Go to Google Meet
+    </button>
+  </div>
+
+  <div class="info">
+    Navigate to <a href="https://meet.google.com" class="link" target="_blank">Google Meet</a>
+    and click the record button to start capturing your meetings.
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

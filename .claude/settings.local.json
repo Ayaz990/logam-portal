@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//Users/developerlogam/Documents/logam-apk/logam-apk/pages/**)",
+      "Read(//Users/developerlogam/Documents/logam-apk/logam-apk/components/ui/**)",
+      "Bash(rm:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

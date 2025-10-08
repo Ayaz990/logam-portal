@@ -1,0 +1,36 @@
+{
+  "manifest_version": 3,
+  "name": "Logam Meet Recorder",
+  "version": "1.0.0",
+  "description": "Record Google Meet sessions and save to dashboard",
+  "permissions": [
+    "activeTab",
+    "tabs",
+    "storage",
+    "desktopCapture",
+    "tabCapture"
+  ],
+  "host_permissions": [
+    "https://meet.google.com/*",
+    "http://localhost:3001/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://meet.google.com/*"],
+      "js": ["realtime-transcriber.js", "recorder-ui.js"],
+      "css": ["styles-new.css"]
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Logam Meet Recorder"
+  },
+  "icons": {
+    "16": "Logam-Digital-Logo-150x150.png",
+    "48": "Logam-Digital-Logo-150x150.png",
+    "128": "Logam-Digital-Logo-150x150.png"
+  }
+}

@@ -1,0 +1,16 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Allow read/write access to all files for development
+    // NOTE: This should be more restrictive in production
+    match /{allPaths=**} {
+      allow read, write: if true;
+    }
+    
+    // Specific rules for recordings
+    match /recordings/{fileName} {
+      allow read, write: if true;
+    }
+  }
+}
