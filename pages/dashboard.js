@@ -53,6 +53,7 @@ export default function Dashboard() {
   const [selectedMeeting, setSelectedMeeting] = useState(null)
   const [modalOpen, setModalOpen] = useState(false)
   const [modalType, setModalType] = useState('transcript') // 'transcript', 'summary', or 'video'
+  const [claiming, setClaiming] = useState(false)
 
   // Menu items
   const menuItems = [
@@ -146,6 +147,33 @@ export default function Dashboard() {
   const copyMeetingUrl = (url) => {
     navigator.clipboard.writeText(url)
     showNotification('URL copied to clipboard')
+  }
+
+  const claimExistingRecordings = async () => {
+    if (!confirm('This will assign all unclaimed recordings to your account. Continue?')) {
+      return
+    }
+
+    setClaiming(true)
+    try {
+      const response = await fetch('/api/claim-recordings', {
+        method: 'POST'
+      })
+
+      const data = await response.json()
+
+      if (response.ok) {
+        showNotification(`Successfully claimed ${data.claimed} recordings!`)
+        // Refresh will happen automatically due to the useEffect
+      } else {
+        showNotification('Failed to claim recordings: ' + data.error)
+      }
+    } catch (error) {
+      console.error('Claim error:', error)
+      showNotification('Failed to claim recordings')
+    } finally {
+      setClaiming(false)
+    }
   }
 
   const deleteRecording = async (recordingId) => {
@@ -356,6 +384,36 @@ export default function Dashboard() {
                     <p className="text-3xl font-bold">{stats.thisWeek}</p>
                   </div>
                 </div>
+
+                {/* Claim Existing Recordings Banner */}
+                {stats.total === 0 && (
+                  <div className="bg-blue-50 border-2 border-blue-600 rounded-xl p-6 mb-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="text-lg font-bold text-blue-900 mb-1">
+                          Have existing recordings?
+                        </h3>
+                        <p className="text-sm text-blue-700">
+                          Click here to claim any unclaimed recordings and add them to your dashboard
+                        </p>
+                      </div>
+                      <button
+                        onClick={claimExistingRecordings}
+                        disabled={claiming}
+                        className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                      >
+                        {claiming ? (
+                          <>
+                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                            Claiming...
+                          </>
+                        ) : (
+                          'Claim Recordings'
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {/* Search and Filters */}
                 <div className="flex items-center gap-4 mb-6">
