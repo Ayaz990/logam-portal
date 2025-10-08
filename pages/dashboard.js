@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { collection, query, orderBy, onSnapshot } from 'firebase/firestore'
+import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { useSession, signOut } from 'next-auth/react'
 import { useRouter } from 'next/router'
@@ -63,9 +63,19 @@ export default function Dashboard() {
   ]
 
   useEffect(() => {
-    console.log('🔍 Dashboard: Fetching recordings from Firebase...')
+    // Only fetch recordings if user is authenticated
+    if (!session?.user?.id) {
+      return
+    }
 
-    const q = query(collection(db, 'meetings'), orderBy('createdAt', 'desc'))
+    console.log('🔍 Dashboard: Fetching recordings for user:', session.user.id)
+
+    // Query only recordings belonging to the current user
+    const q = query(
+      collection(db, 'meetings'),
+      where('userId', '==', session.user.id),
+      orderBy('createdAt', 'desc')
+    )
 
     const unsubscribe = onSnapshot(q,
       (snapshot) => {
@@ -77,7 +87,7 @@ export default function Dashboard() {
           recordingData.push({ id: doc.id, ...data })
         })
 
-        console.log('✅ Total recordings loaded:', recordingData.length)
+        console.log('✅ Total recordings loaded for user:', recordingData.length)
         setRecordings(recordingData)
 
         // Calculate stats
@@ -113,7 +123,7 @@ export default function Dashboard() {
     )
 
     return () => unsubscribe()
-  }, [])
+  }, [session])
 
   const formatFileSize = (bytes) => {
     if (!bytes) return '0 B'

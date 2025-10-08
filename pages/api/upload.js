@@ -45,6 +45,7 @@ export default async function handler(req, res) {
     const timestamp = fields.timestamp?.[0]
     const meetingName = fields.meetingName?.[0] || 'Untitled Meeting'
     const duration = fields.duration?.[0]
+    const userId = fields.userId?.[0] // Get userId from extension
 
     if (!videoFile || !meetUrl || !timestamp) {
       return res.status(400).json({ error: 'Missing required fields' })
@@ -87,6 +88,7 @@ export default async function handler(req, res) {
     console.log('💾 Saving to database...')
     // Save metadata to Firestore
     const meetingData = {
+      userId: userId || 'anonymous', // Save userId (default to anonymous if not provided)
       meetUrl,
       timestamp: parseInt(timestamp),
       videoUrl: downloadURL,
