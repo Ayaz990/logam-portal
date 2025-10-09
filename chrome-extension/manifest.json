@@ -12,12 +12,15 @@
   ],
   "host_permissions": [
     "https://meet.google.com/*",
-    "http://localhost:3001/*"
+    "http://localhost:3001/*",
+    "https://*/*",
+    "http://*/*"
   ],
+  "options_page": "options.html",
   "content_scripts": [
     {
       "matches": ["https://meet.google.com/*"],
-      "js": ["realtime-transcriber.js", "recorder-ui.js"],
+      "js": ["config.js", "realtime-transcriber.js", "recorder-ui.js"],
       "css": ["styles-new.css"]
     }
   ],

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore'
+import { collection, query, where, onSnapshot } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { useSession, signOut } from 'next-auth/react'
 import { useRouter } from 'next/router'
@@ -69,14 +69,12 @@ export default function Dashboard() {
       return
     }
 
-    console.log('🔍 Dashboard: Fetching recordings for user:', session.user.id)
+    console.log('🔍 Dashboard: Fetching recordings for user:', session.user.id, 'Role:', session.user.role)
 
-    // Query only recordings belonging to the current user
-    const q = query(
-      collection(db, 'meetings'),
-      where('userId', '==', session.user.id),
-      orderBy('createdAt', 'desc')
-    )
+    // Admin users see all recordings, regular users see only their own
+    const q = session.user.role === 'admin'
+      ? query(collection(db, 'meetings')) // Admin: fetch all recordings
+      : query(collection(db, 'meetings'), where('userId', '==', session.user.id)) // Regular: only user's recordings
 
     const unsubscribe = onSnapshot(q,
       (snapshot) => {
@@ -86,6 +84,13 @@ export default function Dashboard() {
           const data = doc.data()
           console.log('Recording:', doc.id, data)
           recordingData.push({ id: doc.id, ...data })
+        })
+
+        // Sort by createdAt descending on client-side
+        recordingData.sort((a, b) => {
+          const timeA = a.createdAt?.toDate?.() || new Date(0)
+          const timeB = b.createdAt?.toDate?.() || new Date(0)
+          return timeB - timeA
         })
 
         console.log('✅ Total recordings loaded for user:', recordingData.length)
@@ -343,15 +348,23 @@ export default function Dashboard() {
               <h1 className="text-2xl font-bold">
                 {menuItems.find(item => item.id === activeTab)?.label}
               </h1>
+              {session?.user?.role === 'admin' && (
+                <span className="px-3 py-1 bg-yellow-100 text-yellow-800 text-xs font-semibold rounded-full border border-yellow-300">
+                  ADMIN
+                </span>
+              )}
             </div>
 
-            <button
-              onClick={() => signOut({ callbackUrl: '/' })}
-              className="flex items-center gap-2 px-4 py-2 bg-black text-white hover:bg-black/90 rounded-lg transition"
-            >
-              <LogOut size={18} />
-              <span>Sign Out</span>
-            </button>
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-black/60 hidden sm:block">{session?.user?.email}</span>
+              <button
+                onClick={() => signOut({ callbackUrl: '/' })}
+                className="flex items-center gap-2 px-4 py-2 bg-black text-white hover:bg-black/90 rounded-lg transition"
+              >
+                <LogOut size={18} />
+                <span>Sign Out</span>
+              </button>
+            </div>
           </header>
 
           {/* Content Area */}
@@ -459,9 +472,16 @@ export default function Dashboard() {
                       >
                         <div className="flex items-start justify-between">
                           <div className="flex-1">
-                            <h3 className="text-lg font-semibold mb-2">
-                              {recording.meetingTitle || recording.meetingName || 'Meeting Recording'}
-                            </h3>
+                            <div className="flex items-center gap-2 mb-2">
+                              <h3 className="text-lg font-semibold">
+                                {recording.meetingTitle || recording.meetingName || 'Meeting Recording'}
+                              </h3>
+                              {session?.user?.role === 'admin' && recording.userId && (
+                                <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded">
+                                  User: {recording.userId.substring(0, 8)}
+                                </span>
+                              )}
+                            </div>
 
                             {recording.meetUrl && (
                               <a
@@ -625,9 +645,16 @@ export default function Dashboard() {
                       >
                         <div className="flex items-start justify-between">
                           <div className="flex-1">
-                            <h3 className="text-lg font-semibold mb-2">
-                              {recording.meetingTitle || recording.meetingName || 'Meeting Recording'}
-                            </h3>
+                            <div className="flex items-center gap-2 mb-2">
+                              <h3 className="text-lg font-semibold">
+                                {recording.meetingTitle || recording.meetingName || 'Meeting Recording'}
+                              </h3>
+                              {session?.user?.role === 'admin' && recording.userId && (
+                                <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded">
+                                  User: {recording.userId.substring(0, 8)}
+                                </span>
+                              )}
+                            </div>
 
                             {recording.meetUrl && (
                               <a

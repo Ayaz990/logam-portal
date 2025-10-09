@@ -3,6 +3,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
   const openDashboardBtn = document.getElementById('openDashboard')
   const openMeetBtn = document.getElementById('openMeet')
+  const openSettingsBtn = document.getElementById('openSettings')
   const statusDiv = document.getElementById('status')
   const statusText = document.getElementById('statusText')
 
@@ -40,10 +41,15 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Open dashboard
   if (openDashboardBtn) {
-    openDashboardBtn.addEventListener('click', function(e) {
+    openDashboardBtn.addEventListener('click', async function(e) {
       e.preventDefault()
       console.log('Dashboard button clicked')
-      chrome.tabs.create({ url: 'http://localhost:3001' })
+
+      // Get configured API URL
+      const result = await chrome.storage.sync.get(['apiUrl'])
+      const apiUrl = result.apiUrl || 'http://localhost:3001'
+
+      chrome.tabs.create({ url: apiUrl })
       window.close()
     })
   } else {
@@ -60,6 +66,18 @@ document.addEventListener('DOMContentLoaded', function() {
     })
   } else {
     console.error('Meet button not found!')
+  }
+
+  // Open Settings
+  if (openSettingsBtn) {
+    openSettingsBtn.addEventListener('click', function(e) {
+      e.preventDefault()
+      console.log('Settings button clicked')
+      chrome.runtime.openOptionsPage()
+      window.close()
+    })
+  } else {
+    console.error('Settings button not found!')
   }
 
   // Update status periodically if on Meet page

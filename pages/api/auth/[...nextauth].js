@@ -40,6 +40,7 @@ const authOptions = {
             email,
             password: hashedPassword,
             name: email.split('@')[0],
+            role: 'regular', // Default role for new users
             createdAt: new Date()
           }
 
@@ -47,7 +48,8 @@ const authOptions = {
           return {
             id: docRef.id,
             email: newUser.email,
-            name: newUser.name
+            name: newUser.name,
+            role: newUser.role
           }
         } else {
           // Sign in existing user
@@ -66,7 +68,8 @@ const authOptions = {
           return {
             id: userDoc.id,
             email: userData.email,
-            name: userData.name
+            name: userData.name,
+            role: userData.role || 'regular' // Default to regular if role not set
           }
         }
       }
@@ -76,12 +79,14 @@ const authOptions = {
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id
+        token.role = user.role
       }
       return token
     },
     async session({ session, token }) {
       if (session.user) {
         session.user.id = token.id
+        session.user.role = token.role || 'regular'
       }
       return session
     }

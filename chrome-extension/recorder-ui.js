@@ -717,9 +717,36 @@ class ProfessionalRecorder {
 
   async start() {
     try {
-      this.updateStatus('Requesting permissions...', 'info')
+      // Get configured API URL
+      this.apiUrl = await getApiUrl()
+      console.log('📡 Using API URL:', this.apiUrl)
+
+      // Check if user is logged in first
+      this.updateStatus('Checking authentication...', 'info')
       this.updateRecordButton('processing')
       this.recordBtn.disabled = true
+
+      this.userId = null
+      try {
+        const sessionResponse = await fetch(`${this.apiUrl}/api/auth/session`, {
+          credentials: 'include'
+        })
+        if (sessionResponse.ok) {
+          const sessionData = await sessionResponse.json()
+          if (sessionData.user?.id) {
+            this.userId = sessionData.user.id
+            console.log('✅ User authenticated:', this.userId)
+          }
+        }
+      } catch (err) {
+        console.error('Failed to check authentication:', err)
+      }
+
+      if (!this.userId) {
+        throw new Error(`Please log in to ${this.apiUrl} first to use the recorder. Configure the URL in extension settings if needed.`)
+      }
+
+      this.updateStatus('Requesting permissions...', 'info')
 
       // Get microphone
       console.log('🎤 Getting microphone access...')
@@ -990,12 +1017,16 @@ class ProfessionalRecorder {
 
       const meetingName = this.nameInput.value.trim() || 'Untitled Meeting'
 
+      // Use authenticated userId from start()
+      console.log('📝 Uploading for user:', this.userId)
+
       const formData = new FormData()
       formData.append('video', blob, 'meeting-recording.webm')
       formData.append('meetUrl', window.location.href)
       formData.append('timestamp', this.startTime.toString())
       formData.append('duration', Date.now() - this.startTime)
       formData.append('meetingName', meetingName)
+      formData.append('userId', this.userId)
       formData.append('deleteAfterUpload', 'true')
 
       // Add timeout to fetch
@@ -1013,7 +1044,7 @@ class ProfessionalRecorder {
       }, 500)
 
       try {
-        const response = await fetch('http://localhost:3001/api/upload', {
+        const response = await fetch(`${this.apiUrl}/api/upload`, {
           method: 'POST',
           body: formData,
           signal: controller.signal
