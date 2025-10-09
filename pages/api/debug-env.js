@@ -29,6 +29,10 @@ export default async function handler(req, res) {
       NEXTAUTH_URL: {
         exists: !!process.env.NEXTAUTH_URL,
         value: process.env.NEXTAUTH_URL
+      },
+      VERCEL_AUTOMATION_BYPASS_SECRET: {
+        exists: !!process.env.VERCEL_AUTOMATION_BYPASS_SECRET,
+        value: process.env.VERCEL_AUTOMATION_BYPASS_SECRET ? `${process.env.VERCEL_AUTOMATION_BYPASS_SECRET.substring(0, 10)}...` : null
       }
     },
     baseUrl: process.env.VERCEL_URL
