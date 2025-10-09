@@ -41,7 +41,7 @@ export default async function handler(req, res) {
     console.log('🚀 Starting upload process...')
 
     const form = formidable({
-      maxFileSize: 100 * 1024 * 1024, // Reduced to 100MB for faster processing
+      maxFileSize: 500 * 1024 * 1024, // 500MB limit (very large meetings)
       keepExtensions: true,
       uploadDir: '/tmp', // Use /tmp for faster file operations
     })

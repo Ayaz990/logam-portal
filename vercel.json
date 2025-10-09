@@ -1,0 +1,13 @@
+{
+  "functions": {
+    "pages/api/upload.js": {
+      "maxDuration": 300
+    },
+    "pages/api/trigger-transcribe.js": {
+      "maxDuration": 300
+    },
+    "pages/api/transcribe.js": {
+      "maxDuration": 300
+    }
+  }
+}
