@@ -149,7 +149,8 @@ export default async function handler(req, res) {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'x-internal-api-key': process.env.NEXTAUTH_SECRET
+            'x-internal-api-key': process.env.NEXTAUTH_SECRET,
+            'x-vercel-protection-bypass': process.env.VERCEL_AUTOMATION_BYPASS_SECRET
           },
           body: JSON.stringify({ meetingId: docRef.id })
         }).then(async (resp) => {
