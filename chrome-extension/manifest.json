@@ -20,7 +20,7 @@
   "content_scripts": [
     {
       "matches": ["https://meet.google.com/*"],
-      "js": ["config.js", "realtime-transcriber.js", "recorder-ui.js"],
+      "js": ["config.js", "recorder-ui.js"],
       "css": ["styles-new.css"]
     }
   ],
