@@ -1,6 +1,7 @@
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { collection, addDoc } from 'firebase/firestore'
 import { storage, db } from '@/lib/firebase'
+import { getBaseUrl } from '@/lib/getBaseUrl'
 import formidable from 'formidable'
 import fs from 'fs'
 
@@ -145,7 +146,7 @@ export default async function handler(req, res) {
         try {
           console.log(`📤 Calling trigger-transcribe for meeting: ${docRef.id}`)
 
-          const transcriptResponse = await fetch(`${process.env.NEXTAUTH_URL}/api/trigger-transcribe`, {
+          const transcriptResponse = await fetch(`${getBaseUrl()}/api/trigger-transcribe`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json'

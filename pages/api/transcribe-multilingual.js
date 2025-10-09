@@ -2,6 +2,7 @@
 import { whisper } from 'whisper-node'
 import { doc, updateDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
+import { getBaseUrl } from '@/lib/getBaseUrl'
 import formidable from 'formidable'
 import fs from 'fs'
 
@@ -291,7 +292,7 @@ export default async function handler(req, res) {
     // Generate automatic summary (language-aware)
     console.log('🤖 Generating automatic meeting summary...')
     try {
-      const summaryResponse = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/summarize`, {
+      const summaryResponse = await fetch(`${getBaseUrl()}/api/summarize`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

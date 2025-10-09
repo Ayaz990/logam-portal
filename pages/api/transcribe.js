@@ -1,5 +1,6 @@
 import { doc, updateDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
+import { getBaseUrl } from '@/lib/getBaseUrl'
 import formidable from 'formidable'
 import fs from 'fs'
 import FormData from 'form-data'
@@ -650,7 +651,7 @@ async function processTranscription(audioFile, meetingId, res) {
     // Generate automatic summary
     console.log('🤖 Generating automatic meeting summary...')
     try {
-      const summaryResponse = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/summarize`, {
+      const summaryResponse = await fetch(`${getBaseUrl()}/api/summarize`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

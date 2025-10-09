@@ -1,5 +1,6 @@
 import { doc, getDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
+import { getBaseUrl } from '@/lib/getBaseUrl'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from './auth/[...nextauth]'
 
@@ -55,7 +56,7 @@ export default async function handler(req, res) {
 
     console.log('📤 Sending to transcribe API...')
 
-    const transcribeResponse = await fetch(`${process.env.NEXTAUTH_URL}/api/transcribe`, {
+    const transcribeResponse = await fetch(`${getBaseUrl()}/api/transcribe`, {
       method: 'POST',
       body: formData,
       headers: formData.getHeaders()
