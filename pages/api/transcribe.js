@@ -9,7 +9,9 @@ import axios from 'axios'
 export const config = {
   api: {
     bodyParser: false,
+    responseLimit: false, // Disable limit for large responses
   },
+  maxDuration: 300, // 5 minutes for Vercel Pro (handles large files)
 }
 
 // Simple speaker detection based on audio patterns
@@ -390,7 +392,7 @@ export default async function handler(req, res) {
 
     // Original file upload flow
     const form = formidable({
-      maxFileSize: 100 * 1024 * 1024, // 100MB
+      maxFileSize: 500 * 1024 * 1024, // 500MB to match upload.js
       keepExtensions: true,
     })
 
@@ -411,14 +413,18 @@ export default async function handler(req, res) {
 }
 
 async function processTranscription(audioFile, meetingId, res) {
-  try {
+  let tempFilePath = audioFile.filepath
 
+  try {
     // Update meeting status to processing
     const meetingRef = doc(db, 'meetings', meetingId)
+
+    console.log('📝 Updating meeting status to processing...')
     await updateDoc(meetingRef, {
       'transcript.status': 'processing',
       'transcript.startedAt': new Date()
     })
+    console.log('✅ Meeting status updated to processing')
 
     // Read and preprocess the audio file for better accuracy
     const audioBuffer = fs.readFileSync(audioFile.filepath)
@@ -432,8 +438,12 @@ async function processTranscription(audioFile, meetingId, res) {
       console.warn('⚠️ Audio file is very small, may affect accuracy')
     }
 
-    if (audioFile.size > 100 * 1024 * 1024) {
-      console.warn('⚠️ Audio file is large, processing may take longer')
+    if (audioFile.size > 200 * 1024 * 1024) {
+      console.warn('⚠️ Audio file is large (>200MB), processing may take several minutes')
+    }
+
+    if (audioFile.size > 400 * 1024 * 1024) {
+      console.warn('⚠️ Audio file is very large (>400MB), processing may take 5-10 minutes')
     }
 
     // Transcribe with OpenAI Whisper API
@@ -720,7 +730,14 @@ async function processTranscription(audioFile, meetingId, res) {
     }
 
     // Clean up temporary file
-    fs.unlinkSync(audioFile.filepath)
+    try {
+      if (tempFilePath && fs.existsSync(tempFilePath)) {
+        fs.unlinkSync(tempFilePath)
+        console.log('🧹 Temporary file cleaned up successfully')
+      }
+    } catch (cleanupError) {
+      console.error('⚠️ Failed to cleanup temp file:', cleanupError.message)
+    }
 
     res.status(200).json({
       success: true,
@@ -729,7 +746,31 @@ async function processTranscription(audioFile, meetingId, res) {
     })
 
   } catch (error) {
-    console.error('processTranscription error:', error)
+    console.error('❌ processTranscription error:', error)
+
+    // Clean up temp file on error
+    try {
+      if (tempFilePath && fs.existsSync(tempFilePath)) {
+        fs.unlinkSync(tempFilePath)
+        console.log('🧹 Temporary file cleaned up after error')
+      }
+    } catch (cleanupError) {
+      console.error('⚠️ Failed to cleanup temp file after error:', cleanupError.message)
+    }
+
+    // Update meeting status to failed if not already done
+    try {
+      const meetingRef = doc(db, 'meetings', meetingId)
+      await updateDoc(meetingRef, {
+        'transcript.status': 'failed',
+        'transcript.error': error.message || 'Transcription processing error',
+        'transcript.processedAt': new Date()
+      })
+      console.log('📝 Meeting status updated to failed')
+    } catch (updateError) {
+      console.error('⚠️ Failed to update meeting status:', updateError.message)
+    }
+
     throw error
   }
 }

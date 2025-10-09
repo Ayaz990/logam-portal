@@ -1,7 +1,32 @@
 import axios from 'axios'
 
+// Format timestamp from seconds to MM:SS
+function formatTimestamp(seconds) {
+  if (!seconds) return ''
+  const mins = Math.floor(seconds / 60)
+  const secs = Math.floor(seconds % 60)
+  return `${mins}:${secs.toString().padStart(2, '0')}`
+}
+
+// Build enhanced transcript with timestamps
+function buildTranscriptWithTimestamps(transcript) {
+  const segments = transcript.segments || []
+  if (segments.length === 0) {
+    return transcript.text || ''
+  }
+
+  // Create transcript with timestamps
+  let enhancedText = ''
+  segments.forEach(segment => {
+    const timestamp = formatTimestamp(segment.start)
+    enhancedText += `[${timestamp}] ${segment.text}\n`
+  })
+
+  return enhancedText
+}
+
 // Groq API for AI summarization
-async function generateAISummary(text) {
+async function generateAISummary(text, transcript) {
   try {
     const useGroq = process.env.USE_GROQ === 'true'
     const groqApiKey = process.env.GROQ_API_KEY
@@ -13,6 +38,10 @@ async function generateAISummary(text) {
       return null // Fall back to simple summarization
     }
 
+    // Build transcript with timestamps if available
+    const transcriptWithTimestamps = buildTranscriptWithTimestamps(transcript)
+    const textToAnalyze = transcriptWithTimestamps || text
+
     console.log('🚀 Calling Groq API for summarization...')
     const response = await axios.post(
       'https://api.groq.com/openai/v1/chat/completions',
@@ -21,15 +50,45 @@ async function generateAISummary(text) {
         messages: [
           {
             role: 'system',
-            content: 'You are a professional meeting assistant. Generate concise, actionable summaries of meeting transcripts. Focus on key points, decisions, action items, and next steps.'
+            content: 'You are an expert meeting analyst. Generate detailed, structured summaries in ENGLISH ONLY. Even if the transcript is in another language (Hindi, Romanized Hindi, etc.), translate and summarize it in clear, professional English. Extract specific details, numbers, commitments, and action items. Organize information by topics/categories. When timestamps are available in the transcript, include them at the end of each summary point.'
           },
           {
             role: 'user',
-            content: `Please summarize this meeting transcript:\n\n${text}\n\nProvide:\n1. A brief summary (2-3 sentences)\n2. Key points discussed\n3. Decisions made\n4. Action items identified\n5. Questions raised`
+            content: `Analyze this meeting transcript and provide a detailed summary in ENGLISH (translate if needed):
+
+${textToAnalyze}
+
+Generate a comprehensive summary with the following structure:
+
+## Brief Overview
+Provide 2-3 sentences summarizing the overall meeting purpose and outcomes.
+
+## Action Items and Commitments
+List all specific action items, commitments, decisions, and deliverables mentioned. Include:
+- Specific details (numbers, dates, names)
+- Who is responsible (if mentioned)
+- Deadlines or timeframes
+- Context for each item
+- Timestamp at the end (if available in transcript)
+
+## Key Topics Discussed
+Organize remaining discussion points by logical categories/themes (e.g., "Marketing Strategy", "Revenue Performance", "Team Updates"). For each point:
+- Provide specific details, metrics, or numbers mentioned
+- Include context and reasoning
+- Note any important decisions or conclusions
+- Add timestamp at the end (if available)
+
+Format: Write each point as "Description of the point with all specific details [timestamp]"
+
+Example format:
+- Company reserves 20 monthly scholarship seats for pay-after-placement full stack program 19:50
+- Average lead qualification to conversion time is eight days, with initial interest determined within two days 19:14
+
+Be comprehensive and extract as much specific information as possible from the transcript.`
           }
         ],
         temperature: 0.3,
-        max_tokens: 1000
+        max_tokens: 2000
       },
       {
         headers: {
@@ -136,7 +195,7 @@ async function generateMeetingSummary(transcript) {
 
     // Use Groq AI summarization
     console.log('🤖 Generating Groq AI summary...')
-    const aiSummary = await generateAISummary(text)
+    const aiSummary = await generateAISummary(text, transcript)
 
     if (aiSummary) {
       console.log('✅ Groq AI summary generated successfully with Llama 3.1')

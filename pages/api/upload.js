@@ -8,7 +8,9 @@ import fs from 'fs'
 export const config = {
   api: {
     bodyParser: false,
+    responseLimit: false, // Disable limit for large files
   },
+  maxDuration: 300, // 5 minutes for Vercel Pro (handles large 500MB files)
 }
 
 export default async function handler(req, res) {
