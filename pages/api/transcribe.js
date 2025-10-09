@@ -317,7 +317,16 @@ export default async function handler(req, res) {
   try {
     // Check if request has meetingId in body (from trigger-transcribe)
     if (req.headers['content-type']?.includes('application/json')) {
-      const { meetingId } = req.body
+      // Manually parse JSON body (bodyParser is disabled for FormData support)
+      const rawBody = await new Promise((resolve, reject) => {
+        let data = ''
+        req.on('data', chunk => { data += chunk })
+        req.on('end', () => resolve(data))
+        req.on('error', reject)
+      })
+
+      const body = JSON.parse(rawBody)
+      const { meetingId, videoUrl, mimeType } = body
 
       if (!meetingId) {
         return res.status(400).json({ error: 'Meeting ID is required' })
