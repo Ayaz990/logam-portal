@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { collection, query, where, onSnapshot } from 'firebase/firestore'
+import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { useSession, signOut } from 'next-auth/react'
 import { useRouter } from 'next/router'
@@ -21,7 +21,9 @@ import {
   Play,
   Search,
   Filter,
-  HardDrive
+  HardDrive,
+  Bot,
+  ExternalLink
 } from 'lucide-react'
 
 export default function Dashboard() {
@@ -54,11 +56,14 @@ export default function Dashboard() {
   const [modalOpen, setModalOpen] = useState(false)
   const [modalType, setModalType] = useState('transcript') // 'transcript', 'summary', or 'video'
   const [claiming, setClaiming] = useState(false)
+  const [botRequests, setBotRequests] = useState([])
+  const [botRequestsLoading, setBotRequestsLoading] = useState(true)
 
   // Menu items
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: Home },
     { id: 'recordings', label: 'Recordings', icon: Video },
+    ...(session?.user?.role === 'admin' ? [{ id: 'bot-requests', label: 'Bot Requests', icon: Bot }] : []),
     { id: 'analytics', label: 'Analytics', icon: BarChart3 },
     { id: 'settings', label: 'Settings', icon: Settings }
   ]
@@ -125,6 +130,38 @@ export default function Dashboard() {
         console.error('Error details:', err.message, err.code)
         setError('Failed to load recordings: ' + err.message)
         setLoading(false)
+      }
+    )
+
+    return () => unsubscribe()
+  }, [session])
+
+  // Fetch bot requests (admin only)
+  useEffect(() => {
+    if (!session?.user?.id || session?.user?.role !== 'admin') {
+      return
+    }
+
+    console.log('🤖 Fetching bot requests for admin')
+
+    const q = query(
+      collection(db, 'bot-requests'),
+      orderBy('requestedAt', 'desc')
+    )
+
+    const unsubscribe = onSnapshot(q,
+      (snapshot) => {
+        const requests = []
+        snapshot.forEach((doc) => {
+          requests.push({ id: doc.id, ...doc.data() })
+        })
+        console.log('✅ Bot requests loaded:', requests.length)
+        setBotRequests(requests)
+        setBotRequestsLoading(false)
+      },
+      (err) => {
+        console.error('❌ Error fetching bot requests:', err)
+        setBotRequestsLoading(false)
       }
     )
 
@@ -783,6 +820,92 @@ export default function Dashboard() {
                 <h3 className="text-xl font-semibold mb-2">Analytics Coming Soon</h3>
                 <p className="text-black/60">Track your meeting insights and statistics</p>
               </div>
+            )}
+
+            {/* Bot Requests Tab (Admin Only) */}
+            {activeTab === 'bot-requests' && session?.user?.role === 'admin' && (
+              <>
+                <div className="mb-6">
+                  <h2 className="text-2xl font-bold mb-2">Bot Recording Requests</h2>
+                  <p className="text-black/60">Users requesting bot to join their meetings</p>
+                </div>
+
+                {botRequestsLoading ? (
+                  <div className="text-center py-20">
+                    <div className="inline-block w-8 h-8 border-4 border-black/20 border-t-black rounded-full animate-spin" />
+                    <p className="mt-4 text-black/60">Loading requests...</p>
+                  </div>
+                ) : botRequests.length === 0 ? (
+                  <div className="bg-white border-2 border-black rounded-xl p-12 text-center">
+                    <Bot className="mx-auto mb-4 text-black/40" size={48} />
+                    <h3 className="text-xl font-semibold mb-2">No bot requests yet</h3>
+                    <p className="text-black/60">When users request bot recording, they'll appear here</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {botRequests.map((request) => (
+                      <div
+                        key={request.id}
+                        className="bg-white border-2 border-black rounded-xl p-6 hover:shadow-xl transition"
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-2">
+                              <h3 className="text-lg font-semibold">
+                                {request.meetingName}
+                              </h3>
+                              <span className={`px-3 py-1 text-xs font-semibold rounded-full ${
+                                request.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                                request.status === 'joined' ? 'bg-blue-100 text-blue-800' :
+                                request.status === 'completed' ? 'bg-green-100 text-green-800' :
+                                'bg-gray-100 text-gray-800'
+                              }`}>
+                                {request.status}
+                              </span>
+                            </div>
+
+                            <p className="text-sm text-black/60 mb-2">
+                              Requested by: <span className="font-medium">{request.userEmail}</span>
+                            </p>
+
+                            <div className="flex items-center gap-4 text-sm text-black/60 mb-3">
+                              <span className="flex items-center gap-1">
+                                <Calendar size={16} />
+                                {request.requestedAt?.toDate?.()?.toLocaleDateString() || 'Unknown'}
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <Clock size={16} />
+                                {request.requestedAt?.toDate?.()?.toLocaleTimeString() || 'Unknown'}
+                              </span>
+                            </div>
+
+                            <a
+                              href={request.meetingUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-sm text-blue-600 hover:underline break-all"
+                            >
+                              {request.meetingUrl}
+                            </a>
+                          </div>
+
+                          <div className="flex items-center gap-2 ml-4">
+                            <a
+                              href={request.meetingUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-4 py-2 bg-black text-white rounded-lg hover:bg-black/90 transition font-semibold flex items-center gap-2"
+                            >
+                              <ExternalLink size={18} />
+                              Join Meeting
+                            </a>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
             )}
 
             {/* Settings Tab */}

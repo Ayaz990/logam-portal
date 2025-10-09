@@ -391,6 +391,40 @@ class ProfessionalRecorder {
 
     this.updateRecordButton('ready')
 
+    // Request Bot button
+    this.requestBotBtn = document.createElement('button')
+    this.requestBotBtn.style.cssText = `
+      width: 100% !important;
+      height: 44px !important;
+      background: hsl(142.1 76.2% 36.3%) !important;
+      color: white !important;
+      border: none !important;
+      border-radius: 8px !important;
+      font-size: 14px !important;
+      font-weight: 600 !important;
+      cursor: pointer !important;
+      transition: all 0.2s ease !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      gap: 8px !important;
+      margin-bottom: 12px !important;
+    `
+    this.requestBotBtn.innerHTML = `
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="11" width="18" height="10" rx="2"/>
+        <circle cx="12" cy="5" r="2"/>
+        <path d="M12 7v4"/>
+        <line x1="8" y1="16" x2="8" y2="16"/>
+        <line x1="16" y1="16" x2="16" y2="16"/>
+      </svg>
+      <span>Request Bot Recording</span>
+    `
+
+    this.requestBotBtn.addEventListener('click', () => {
+      this.requestBotRecording()
+    })
+
     this.recordBtn.addEventListener('mouseenter', () => {
       if (!this.recording) {
         this.recordBtn.style.background = 'hsl(222.2 84% 8%) !important'
@@ -432,6 +466,7 @@ class ProfessionalRecorder {
     controlsSection.appendChild(this.nameInput)
     controlsSection.appendChild(autoRecordDiv)
     controlsSection.appendChild(this.recordBtn)
+    controlsSection.appendChild(this.requestBotBtn)
     controlsSection.appendChild(indicatorsDiv)
 
     // Assemble collapsible content
@@ -1482,6 +1517,84 @@ class ProfessionalRecorder {
         resolve(response?.success ? response.botStatus : null)
       })
     })
+  }
+
+  async requestBotRecording() {
+    try {
+      console.log('🤖 Requesting bot recording...')
+
+      const meetingUrl = window.location.href
+      const meetingName = this.nameInput.value || this.extractMeetingNameFromUI() || 'Untitled Meeting'
+
+      this.requestBotBtn.disabled = true
+      this.requestBotBtn.innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 12a9 9 0 11-6.219-8.56"/>
+        </svg>
+        <span>Sending request...</span>
+      `
+
+      const apiUrl = getApiUrl()
+      const response = await fetch(`${apiUrl}/api/bot-request`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          meetingUrl,
+          meetingName,
+          requestedAt: new Date().toISOString()
+        })
+      })
+
+      if (response.ok) {
+        this.showNotification(
+          '✅ Bot Request Sent',
+          'Admin will join the meeting shortly'
+        )
+        this.requestBotBtn.innerHTML = `
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20 6L9 17l-5-5"/>
+          </svg>
+          <span>Request Sent!</span>
+        `
+
+        setTimeout(() => {
+          this.requestBotBtn.disabled = false
+          this.requestBotBtn.innerHTML = `
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="11" width="18" height="10" rx="2"/>
+              <circle cx="12" cy="5" r="2"/>
+              <path d="M12 7v4"/>
+              <line x1="8" y1="16" x2="8" y2="16"/>
+              <line x1="16" y1="16" x2="16" y2="16"/>
+            </svg>
+            <span>Request Bot Recording</span>
+          `
+        }, 3000)
+      } else {
+        throw new Error('Failed to send request')
+      }
+
+    } catch (error) {
+      console.error('❌ Bot request failed:', error)
+      this.showNotification(
+        '❌ Request Failed',
+        'Please try again or contact support'
+      )
+      this.requestBotBtn.disabled = false
+      this.requestBotBtn.innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="11" width="18" height="10" rx="2"/>
+          <circle cx="12" cy="5" r="2"/>
+          <path d="M12 7v4"/>
+          <line x1="8" y1="16" x2="8" y2="16"/>
+          <line x1="16" y1="16" x2="16" y2="16"/>
+        </svg>
+        <span>Request Bot Recording</span>
+      `
+    }
   }
 
   setupKeyboardShortcuts() {
