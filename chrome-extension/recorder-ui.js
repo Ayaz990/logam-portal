@@ -728,7 +728,7 @@ class ProfessionalRecorder {
 
       this.userId = null
       try {
-        const sessionResponse = await fetch(`${this.apiUrl}/api/auth/session`, {
+        const sessionResponse = await fetch(`${this.apiUrl}/api/check-session`, {
           credentials: 'include'
         })
         if (sessionResponse.ok) {
