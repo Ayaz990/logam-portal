@@ -1523,10 +1523,49 @@ class ProfessionalRecorder {
     try {
       console.log('🤖 Requesting bot recording...')
 
+      const apiUrl = getApiUrl()
+
+      // First check if user is logged in
+      this.requestBotBtn.disabled = true
+      this.requestBotBtn.innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 12a9 9 0 11-6.219-8.56"/>
+        </svg>
+        <span>Checking login...</span>
+      `
+
+      const sessionCheck = await fetch(`${apiUrl}/api/check-session`, {
+        credentials: 'include'
+      })
+
+      let userId = null
+      if (sessionCheck.ok) {
+        const sessionData = await sessionCheck.json()
+        userId = sessionData.user?.id
+      }
+
+      if (!userId) {
+        this.showNotification(
+          '🔒 Please Login First',
+          `Go to ${apiUrl} and login to use bot recording`
+        )
+        this.requestBotBtn.disabled = false
+        this.requestBotBtn.innerHTML = `
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="11" width="18" height="10" rx="2"/>
+            <circle cx="12" cy="5" r="2"/>
+            <path d="M12 7v4"/>
+            <line x1="8" y1="16" x2="8" y2="16"/>
+            <line x1="16" y1="16" x2="16" y2="16"/>
+          </svg>
+          <span>Request Bot Recording</span>
+        `
+        return
+      }
+
       const meetingUrl = window.location.href
       const meetingName = this.nameInput.value || this.extractMeetingNameFromUI() || 'Untitled Meeting'
 
-      this.requestBotBtn.disabled = true
       this.requestBotBtn.innerHTML = `
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M21 12a9 9 0 11-6.219-8.56"/>
@@ -1534,7 +1573,6 @@ class ProfessionalRecorder {
         <span>Sending request...</span>
       `
 
-      const apiUrl = getApiUrl()
       const response = await fetch(`${apiUrl}/api/bot-request`, {
         method: 'POST',
         headers: {
