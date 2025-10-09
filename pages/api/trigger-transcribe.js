@@ -70,7 +70,10 @@ export default async function handler(req, res) {
     const transcribeResponse = await fetch(`${getBaseUrl()}/api/transcribe`, {
       method: 'POST',
       body: formData,
-      headers: formData.getHeaders()
+      headers: {
+        ...formData.getHeaders(),
+        'x-vercel-protection-bypass': process.env.VERCEL_AUTOMATION_BYPASS_SECRET
+      }
     })
 
     if (!transcribeResponse.ok) {
