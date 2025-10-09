@@ -143,19 +143,21 @@ export default async function handler(req, res) {
       // Use a proper background job (don't block the response)
       setImmediate(async () => {
         try {
-          const transcriptFormData = new FormData()
-          transcriptFormData.append('audio', new Blob([fileBuffer], { type: videoFile.mimetype }))
-          transcriptFormData.append('meetingId', docRef.id)
+          console.log(`📤 Calling trigger-transcribe for meeting: ${docRef.id}`)
 
-          const transcriptResponse = await fetch(`${process.env.NEXTAUTH_URL}/api/transcribe`, {
+          const transcriptResponse = await fetch(`${process.env.NEXTAUTH_URL}/api/trigger-transcribe`, {
             method: 'POST',
-            body: transcriptFormData,
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ meetingId: docRef.id })
           })
 
           if (transcriptResponse.ok) {
             console.log(`✅ Transcript generation started for ${docRef.id}`)
           } else {
-            console.error('❌ Auto-transcript failed:', await transcriptResponse.text())
+            const errorText = await transcriptResponse.text()
+            console.error('❌ Auto-transcript failed:', errorText)
           }
         } catch (error) {
           console.error('❌ Auto-transcript error:', error)
