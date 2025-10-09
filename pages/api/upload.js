@@ -135,37 +135,37 @@ export default async function handler(req, res) {
       message: 'Recording uploaded successfully'
     }
 
-    // Auto-trigger transcript generation BEFORE responding (must run before serverless function terminates)
+    // Trigger transcription BEFORE responding (Vercel serverless requirement)
     if (process.env.AUTO_TRANSCRIPT === 'true') {
       console.log('🎤 Triggering transcript generation...')
+      console.log(`📤 Calling trigger-transcribe for meeting: ${docRef.id}`)
 
       try {
-        console.log(`📤 Calling trigger-transcribe for meeting: ${docRef.id}`)
+        // Make the call but don't wait for completion
+        const baseUrl = getBaseUrl()
+        console.log(`🔗 Base URL: ${baseUrl}`)
 
-        // Call trigger-transcribe WITHOUT await - fire and forget
-        // This starts the transcription but doesn't wait for it to complete
-        fetch(`${getBaseUrl()}/api/trigger-transcribe`, {
+        fetch(`${baseUrl}/api/trigger-transcribe`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'x-internal-api-key': process.env.NEXTAUTH_SECRET
           },
           body: JSON.stringify({ meetingId: docRef.id })
-        }).then(async (transcriptResponse) => {
-          if (transcriptResponse.ok) {
-            console.log(`✅ Transcript generation started for ${docRef.id}`)
+        }).then(async (resp) => {
+          if (resp.ok) {
+            console.log(`✅ Transcript generation started`)
           } else {
-            const errorText = await transcriptResponse.text()
-            console.error(`❌ Auto-transcript failed (${transcriptResponse.status}):`, errorText)
+            console.error(`❌ Trigger failed (${resp.status}):`, await resp.text())
           }
-        }).catch(error => {
-          console.error('❌ Auto-transcript error:', error)
+        }).catch(err => {
+          console.error('❌ Trigger error:', err.message)
         })
 
-        // Give it 500ms to start the request before responding
-        await new Promise(resolve => setTimeout(resolve, 500))
+        // Small delay to ensure the request starts
+        await new Promise(resolve => setTimeout(resolve, 100))
       } catch (error) {
-        console.error('❌ Auto-transcript trigger error:', error)
+        console.error('❌ Auto-transcript error:', error)
       }
     }
 
