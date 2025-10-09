@@ -135,37 +135,41 @@ export default async function handler(req, res) {
       message: 'Recording uploaded successfully'
     }
 
-    res.status(200).json(response)
-
-    // Auto-trigger transcript generation AFTER responding (non-blocking)
+    // Auto-trigger transcript generation BEFORE responding (must run before serverless function terminates)
     if (process.env.AUTO_TRANSCRIPT === 'true') {
       console.log('🎤 Triggering transcript generation...')
 
-      // Use a proper background job (don't block the response)
-      setImmediate(async () => {
-        try {
-          console.log(`📤 Calling trigger-transcribe for meeting: ${docRef.id}`)
+      try {
+        console.log(`📤 Calling trigger-transcribe for meeting: ${docRef.id}`)
 
-          const transcriptResponse = await fetch(`${getBaseUrl()}/api/trigger-transcribe`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-internal-api-key': process.env.NEXTAUTH_SECRET
-            },
-            body: JSON.stringify({ meetingId: docRef.id })
-          })
-
+        // Call trigger-transcribe WITHOUT await - fire and forget
+        // This starts the transcription but doesn't wait for it to complete
+        fetch(`${getBaseUrl()}/api/trigger-transcribe`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-internal-api-key': process.env.NEXTAUTH_SECRET
+          },
+          body: JSON.stringify({ meetingId: docRef.id })
+        }).then(async (transcriptResponse) => {
           if (transcriptResponse.ok) {
             console.log(`✅ Transcript generation started for ${docRef.id}`)
           } else {
             const errorText = await transcriptResponse.text()
             console.error(`❌ Auto-transcript failed (${transcriptResponse.status}):`, errorText)
           }
-        } catch (error) {
+        }).catch(error => {
           console.error('❌ Auto-transcript error:', error)
-        }
-      })
+        })
+
+        // Give it 500ms to start the request before responding
+        await new Promise(resolve => setTimeout(resolve, 500))
+      } catch (error) {
+        console.error('❌ Auto-transcript trigger error:', error)
+      }
     }
+
+    res.status(200).json(response)
 
   } catch (error) {
     console.error('❌ Upload error:', error)
