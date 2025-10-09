@@ -58,6 +58,7 @@ export default function Dashboard() {
   const [claiming, setClaiming] = useState(false)
   const [botRequests, setBotRequests] = useState([])
   const [botRequestsLoading, setBotRequestsLoading] = useState(true)
+  const [transcribing, setTranscribing] = useState({})
 
   // Menu items
   const menuItems = [
@@ -167,6 +168,31 @@ export default function Dashboard() {
 
     return () => unsubscribe()
   }, [session])
+
+  const handleGenerateTranscript = async (recordingId) => {
+    try {
+      setTranscribing(prev => ({ ...prev, [recordingId]: true }))
+
+      const response = await fetch('/api/trigger-transcribe', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ meetingId: recordingId })
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to generate transcript')
+      }
+
+      showNotification('Transcript generation started. This may take a few minutes.')
+    } catch (error) {
+      console.error('Error generating transcript:', error)
+      showNotification('Failed to start transcript generation')
+    } finally {
+      setTranscribing(prev => ({ ...prev, [recordingId]: false }))
+    }
+  }
 
   const formatFileSize = (bytes) => {
     if (!bytes) return '0 B'
