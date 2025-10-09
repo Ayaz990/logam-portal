@@ -45,35 +45,22 @@ export default async function handler(req, res) {
 
     const meetingData = meetingSnap.data()
 
-    // Download video from Firebase Storage URL
-    console.log('📥 Downloading video from:', meetingData.videoUrl)
+    console.log('📤 Sending meeting info to transcribe API...')
+    console.log('Video URL:', meetingData.videoUrl)
+    console.log('File size:', meetingData.fileSize, 'bytes')
 
-    const videoResponse = await fetch(meetingData.videoUrl)
-    if (!videoResponse.ok) {
-      throw new Error('Failed to download video')
-    }
-
-    const videoBuffer = await videoResponse.arrayBuffer()
-    console.log(`✅ Video downloaded: ${(videoBuffer.byteLength / 1024 / 1024).toFixed(2)} MB`)
-
-    // Send to transcribe API
-    const FormData = require('form-data')
-    const formData = new FormData()
-    formData.append('audio', Buffer.from(videoBuffer), {
-      filename: 'recording.webm',
-      contentType: meetingData.mimeType || 'video/webm'
-    })
-    formData.append('meetingId', meetingId)
-
-    console.log('📤 Sending to transcribe API...')
-
+    // Send meeting ID to transcribe API (it will download the video directly from Firebase)
     const transcribeResponse = await fetch(`${getBaseUrl()}/api/transcribe`, {
       method: 'POST',
-      body: formData,
       headers: {
-        ...formData.getHeaders(),
+        'Content-Type': 'application/json',
         'x-vercel-protection-bypass': process.env.VERCEL_AUTOMATION_BYPASS_SECRET
-      }
+      },
+      body: JSON.stringify({
+        meetingId,
+        videoUrl: meetingData.videoUrl,
+        mimeType: meetingData.mimeType || 'video/webm'
+      })
     })
 
     if (!transcribeResponse.ok) {
