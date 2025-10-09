@@ -98,6 +98,17 @@ const authOptions = {
   session: {
     strategy: 'jwt',
   },
+  cookies: {
+    sessionToken: {
+      name: `next-auth.session-token`,
+      options: {
+        httpOnly: true,
+        sameSite: 'none',
+        path: '/',
+        secure: true
+      }
+    }
+  },
   secret: process.env.NEXTAUTH_SECRET,
 }
 
