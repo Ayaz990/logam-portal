@@ -314,7 +314,54 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Parse the uploaded file
+    // Check if request has meetingId in body (from trigger-transcribe)
+    if (req.headers['content-type']?.includes('application/json')) {
+      const { meetingId } = req.body
+
+      if (!meetingId) {
+        return res.status(400).json({ error: 'Meeting ID is required' })
+      }
+
+      console.log('🎤 Transcribe request for meeting:', meetingId)
+
+      // Get meeting data and download video
+      const meetingRef = doc(db, 'meetings', meetingId)
+      const meetingSnap = await require('firebase/firestore').getDoc(meetingRef)
+
+      if (!meetingSnap.exists()) {
+        return res.status(404).json({ error: 'Meeting not found' })
+      }
+
+      const meetingData = meetingSnap.data()
+
+      // Download video from Firebase Storage
+      console.log('📥 Downloading video from:', meetingData.videoUrl)
+      const videoResponse = await fetch(meetingData.videoUrl)
+      if (!videoResponse.ok) {
+        throw new Error('Failed to download video')
+      }
+
+      const videoBuffer = await videoResponse.arrayBuffer()
+      console.log(`✅ Video downloaded: ${(videoBuffer.byteLength / 1024 / 1024).toFixed(2)} MB`)
+
+      // Save to temp file
+      const tempPath = `/tmp/recording-${Date.now()}.webm`
+      fs.writeFileSync(tempPath, Buffer.from(videoBuffer))
+
+      // Process this temp file
+      const audioFile = {
+        filepath: tempPath,
+        size: videoBuffer.byteLength,
+        mimetype: meetingData.mimeType || 'video/webm',
+        originalFilename: 'recording.webm'
+      }
+
+      // Continue with normal transcription flow...
+      await processTranscription(audioFile, meetingId, res)
+      return
+    }
+
+    // Original file upload flow
     const form = formidable({
       maxFileSize: 100 * 1024 * 1024, // 100MB
       keepExtensions: true,
@@ -327,6 +374,17 @@ export default async function handler(req, res) {
     if (!audioFile || !meetingId) {
       return res.status(400).json({ error: 'Audio file and meeting ID are required' })
     }
+
+    await processTranscription(audioFile, meetingId, res)
+
+  } catch (error) {
+    console.error('Transcription error:', error)
+    res.status(500).json({ error: 'Internal server error', details: error.message })
+  }
+}
+
+async function processTranscription(audioFile, meetingId, res) {
+  try {
 
     // Update meeting status to processing
     const meetingRef = doc(db, 'meetings', meetingId)
@@ -643,7 +701,7 @@ export default async function handler(req, res) {
     })
 
   } catch (error) {
-    console.error('Transcription error:', error)
-    res.status(500).json({ error: 'Internal server error' })
+    console.error('processTranscription error:', error)
+    throw error
   }
 }
