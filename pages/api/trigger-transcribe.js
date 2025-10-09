@@ -10,10 +10,21 @@ export default async function handler(req, res) {
   }
 
   try {
-    const session = await getServerSession(req, res, authOptions)
+    // Allow internal server-to-server calls with special header
+    const internalApiKey = req.headers['x-internal-api-key']
+    const isInternalCall = internalApiKey === process.env.NEXTAUTH_SECRET
 
-    if (!session) {
-      return res.status(401).json({ error: 'Not authenticated' })
+    console.log('🔔 Trigger-transcribe called', { isInternalCall })
+
+    // Check authentication (skip for internal calls)
+    if (!isInternalCall) {
+      const session = await getServerSession(req, res, authOptions)
+      if (!session) {
+        console.log('❌ Authentication failed - no session')
+        return res.status(401).json({ error: 'Not authenticated' })
+      }
+    } else {
+      console.log('✅ Internal API call authenticated')
     }
 
     const { meetingId } = req.body
@@ -22,7 +33,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Meeting ID is required' })
     }
 
-    console.log('🎤 Manual transcribe request for meeting:', meetingId)
+    console.log('🎤 Transcribe request for meeting:', meetingId)
 
     // Get meeting data from Firestore
     const meetingRef = doc(db, 'meetings', meetingId)

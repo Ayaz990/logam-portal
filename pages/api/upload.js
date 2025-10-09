@@ -149,7 +149,8 @@ export default async function handler(req, res) {
           const transcriptResponse = await fetch(`${getBaseUrl()}/api/trigger-transcribe`, {
             method: 'POST',
             headers: {
-              'Content-Type': 'application/json'
+              'Content-Type': 'application/json',
+              'x-internal-api-key': process.env.NEXTAUTH_SECRET
             },
             body: JSON.stringify({ meetingId: docRef.id })
           })
@@ -158,7 +159,7 @@ export default async function handler(req, res) {
             console.log(`✅ Transcript generation started for ${docRef.id}`)
           } else {
             const errorText = await transcriptResponse.text()
-            console.error('❌ Auto-transcript failed:', errorText)
+            console.error(`❌ Auto-transcript failed (${transcriptResponse.status}):`, errorText)
           }
         } catch (error) {
           console.error('❌ Auto-transcript error:', error)
