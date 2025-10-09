@@ -1,4 +1,4 @@
-import { doc, updateDoc } from 'firebase/firestore'
+import { doc, updateDoc, getDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { getBaseUrl } from '@/lib/getBaseUrl'
 import formidable from 'formidable'
@@ -318,57 +318,74 @@ export default async function handler(req, res) {
     // Check if request has meetingId in body (from trigger-transcribe)
     if (req.headers['content-type']?.includes('application/json')) {
       // Manually parse JSON body (bodyParser is disabled for FormData support)
-      const rawBody = await new Promise((resolve, reject) => {
-        let data = ''
-        req.on('data', chunk => { data += chunk })
-        req.on('end', () => resolve(data))
-        req.on('error', reject)
-      })
+      let rawBody
+      try {
+        rawBody = await new Promise((resolve, reject) => {
+          let data = ''
+          req.on('data', chunk => { data += chunk })
+          req.on('end', () => resolve(data))
+          req.on('error', reject)
+        })
 
-      const body = JSON.parse(rawBody)
-      const { meetingId, videoUrl, mimeType } = body
+        console.log('📦 Raw body received:', rawBody.substring(0, 200))
 
-      if (!meetingId) {
-        return res.status(400).json({ error: 'Meeting ID is required' })
+        if (!rawBody || rawBody.trim() === '') {
+          throw new Error('Empty request body')
+        }
+
+        const body = JSON.parse(rawBody)
+        const { meetingId, videoUrl, mimeType } = body
+
+        if (!meetingId) {
+          console.error('❌ Missing meetingId in request body:', body)
+          return res.status(400).json({ error: 'Meeting ID is required' })
+        }
+
+        console.log('🎤 Transcribe request for meeting:', meetingId)
+
+        // Get meeting data and download video
+        const meetingRef = doc(db, 'meetings', meetingId)
+        const meetingSnap = await getDoc(meetingRef)
+
+        if (!meetingSnap.exists()) {
+          return res.status(404).json({ error: 'Meeting not found' })
+        }
+
+        const meetingData = meetingSnap.data()
+
+        // Download video from Firebase Storage
+        console.log('📥 Downloading video from:', meetingData.videoUrl)
+        const videoResponse = await fetch(meetingData.videoUrl)
+        if (!videoResponse.ok) {
+          throw new Error('Failed to download video')
+        }
+
+        const videoBuffer = await videoResponse.arrayBuffer()
+        console.log(`✅ Video downloaded: ${(videoBuffer.byteLength / 1024 / 1024).toFixed(2)} MB`)
+
+        // Save to temp file
+        const tempPath = `/tmp/recording-${Date.now()}.webm`
+        fs.writeFileSync(tempPath, Buffer.from(videoBuffer))
+
+        // Process this temp file
+        const audioFile = {
+          filepath: tempPath,
+          size: videoBuffer.byteLength,
+          mimetype: meetingData.mimeType || 'video/webm',
+          originalFilename: 'recording.webm'
+        }
+
+        // Continue with normal transcription flow...
+        await processTranscription(audioFile, meetingId, res)
+        return
+
+      } catch (parseError) {
+        console.error('❌ Body parsing error:', parseError)
+        return res.status(400).json({
+          error: 'Invalid request body',
+          details: parseError.message
+        })
       }
-
-      console.log('🎤 Transcribe request for meeting:', meetingId)
-
-      // Get meeting data and download video
-      const meetingRef = doc(db, 'meetings', meetingId)
-      const meetingSnap = await require('firebase/firestore').getDoc(meetingRef)
-
-      if (!meetingSnap.exists()) {
-        return res.status(404).json({ error: 'Meeting not found' })
-      }
-
-      const meetingData = meetingSnap.data()
-
-      // Download video from Firebase Storage
-      console.log('📥 Downloading video from:', meetingData.videoUrl)
-      const videoResponse = await fetch(meetingData.videoUrl)
-      if (!videoResponse.ok) {
-        throw new Error('Failed to download video')
-      }
-
-      const videoBuffer = await videoResponse.arrayBuffer()
-      console.log(`✅ Video downloaded: ${(videoBuffer.byteLength / 1024 / 1024).toFixed(2)} MB`)
-
-      // Save to temp file
-      const tempPath = `/tmp/recording-${Date.now()}.webm`
-      fs.writeFileSync(tempPath, Buffer.from(videoBuffer))
-
-      // Process this temp file
-      const audioFile = {
-        filepath: tempPath,
-        size: videoBuffer.byteLength,
-        mimetype: meetingData.mimeType || 'video/webm',
-        originalFilename: 'recording.webm'
-      }
-
-      // Continue with normal transcription flow...
-      await processTranscription(audioFile, meetingId, res)
-      return
     }
 
     // Original file upload flow
