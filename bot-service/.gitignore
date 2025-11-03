@@ -1,0 +1,25 @@
+# Environment variables
+.env
+
+# Node modules
+node_modules/
+
+# Recordings (temporary)
+*.webm
+*.mp4
+recording-*
+
+# Keep debug screenshots (for debugging)
+# *.jpg
+# *.png
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Chrome user data
+chrome-user-data/

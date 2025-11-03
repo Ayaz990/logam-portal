@@ -8,6 +8,9 @@
     },
     "pages/api/transcribe.js": {
       "maxDuration": 300
+    },
+    "pages/api/save-meeting.js": {
+      "maxDuration": 60
     }
   }
 }

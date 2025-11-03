@@ -1032,7 +1032,7 @@ class ProfessionalRecorder {
 
   async uploadToFirebase() {
     try {
-      console.log('📤 Uploading to Firebase...')
+      console.log('📤 Starting direct Firebase upload...')
 
       // Validate recording data
       if (this.chunks.length === 0 || this.recordingDataSize === 0) {
@@ -1040,7 +1040,7 @@ class ProfessionalRecorder {
       }
 
       this.updateRecordButton('uploading')
-      this.updateStatus(`Uploading ${(this.recordingDataSize / 1024 / 1024).toFixed(1)}MB...`, 'info')
+      this.updateStatus(`Uploading ${(this.recordingDataSize / 1024 / 1024).toFixed(1)}MB directly to Firebase...`, 'info')
 
       // Show progress bar
       this.progressContainer.style.display = 'block'
@@ -1048,93 +1048,81 @@ class ProfessionalRecorder {
       this.progressPercent.textContent = '0%'
 
       const blob = new Blob(this.chunks, { type: 'video/webm' })
-      console.log('Final blob size:', blob.size, 'bytes')
+      console.log('📦 Final blob size:', blob.size, 'bytes')
 
       const meetingName = this.nameInput.value.trim() || 'Untitled Meeting'
 
-      // Use authenticated userId from start()
-      console.log('📝 Uploading for user:', this.userId)
+      // Generate unique filename
+      const timestamp = this.startTime || Date.now()
+      const fileName = `recordings/${timestamp}-${Date.now()}.webm`
+      console.log('📁 Upload path:', fileName)
 
-      const formData = new FormData()
-      formData.append('video', blob, 'meeting-recording.webm')
-      formData.append('meetUrl', window.location.href)
-      formData.append('timestamp', this.startTime.toString())
-      formData.append('duration', Date.now() - this.startTime)
-      formData.append('meetingName', meetingName)
-      formData.append('userId', this.userId)
-      formData.append('deleteAfterUpload', 'true')
+      // Initialize Firebase Uploader
+      const uploader = new FirebaseUploader(window.firebaseConfig)
 
-      // Add timeout to fetch
-      const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), 300000) // 5 minutes
+      // Upload directly to Firebase Storage with progress tracking
+      const downloadURL = await uploader.uploadFile(blob, fileName, (percent) => {
+        this.progressBar.style.width = percent + '%'
+        this.progressPercent.textContent = percent + '%'
 
-      // Simulate upload progress (since we can't track real progress easily)
-      const progressInterval = setInterval(() => {
-        const currentWidth = parseFloat(this.progressBar.style.width) || 0
-        if (currentWidth < 90) {
-          const newWidth = Math.min(currentWidth + Math.random() * 10, 90)
-          this.progressBar.style.width = newWidth + '%'
-          this.progressPercent.textContent = Math.round(newWidth) + '%'
+        if (percent === 100) {
+          this.updateStatus('Upload complete! Saving metadata...', 'info')
         }
-      }, 500)
+      })
 
-      try {
-        const response = await fetch(`${this.apiUrl}/api/upload`, {
-          method: 'POST',
-          body: formData,
-          signal: controller.signal
+      console.log('✅ Firebase upload complete!')
+      console.log('🔗 Download URL:', downloadURL)
+
+      // Now save metadata to Firestore via API
+      console.log('💾 Saving meeting metadata...')
+
+      const metadataResponse = await fetch(`${this.apiUrl}/api/save-meeting`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId: this.userId,
+          meetUrl: window.location.href,
+          timestamp: timestamp,
+          videoUrl: downloadURL,
+          downloadURL: downloadURL,
+          fileName: fileName,
+          fileSize: blob.size,
+          mimeType: 'video/webm',
+          meetingName: meetingName,
+          duration: Date.now() - this.startTime
         })
+      })
 
-        clearInterval(progressInterval)
-        clearTimeout(timeout)
-
-        // Complete progress bar
-        this.progressBar.style.width = '100%'
-        this.progressPercent.textContent = '100%'
-
-        if (!response.ok) {
-          const errorText = await response.text()
-          throw new Error(`Upload failed (${response.status}): ${errorText}`)
-        }
-
-        const result = await response.json()
-        console.log('✅ Upload successful:', result)
-
-        // Success - cleanup and reset
-        this.cleanupStreams()
-        this.uploadRetries = 0
-        this.recordBtn.disabled = false
-
-        this.updateRecordButton('success')
-        this.updateStatus('Recording saved to dashboard!', 'success')
-
-        // Show download URL if available
-        if (result.downloadURL) {
-          console.log('📥 Download URL:', result.downloadURL)
-        }
-
-        // Hide progress bar after short delay
-        setTimeout(() => {
-          this.progressContainer.style.display = 'none'
-        }, 1500)
-
-        setTimeout(() => {
-          this.updateRecordButton('ready')
-          this.updateStatus('Ready to record', 'info')
-          this.timerDiv.textContent = '00:00'
-          this.sizeDiv.style.display = 'none'
-          this.sizeDiv.textContent = '0 MB'
-        }, 3000)
-
-      } catch (fetchError) {
-        clearInterval(progressInterval)
-        clearTimeout(timeout)
-
-        if (fetchError.name === 'AbortError') {
-          throw new Error('Upload timeout - file may be too large')
-        }
-        throw fetchError
+      if (!metadataResponse.ok) {
+        const errorText = await metadataResponse.text()
+        throw new Error(`Failed to save metadata (${metadataResponse.status}): ${errorText}`)
       }
+
+      const result = await metadataResponse.json()
+      console.log('✅ Metadata saved:', result)
+
+      // Success - cleanup and reset
+      this.cleanupStreams()
+      this.uploadRetries = 0
+      this.recordBtn.disabled = false
+
+      this.updateRecordButton('success')
+      this.updateStatus('Recording saved to dashboard!', 'success')
+
+      // Hide progress bar after short delay
+      setTimeout(() => {
+        this.progressContainer.style.display = 'none'
+      }, 1500)
+
+      setTimeout(() => {
+        this.updateRecordButton('ready')
+        this.updateStatus('Ready to record', 'info')
+        this.timerDiv.textContent = '00:00'
+        this.sizeDiv.style.display = 'none'
+        this.sizeDiv.textContent = '0 MB'
+      }, 3000)
 
     } catch (error) {
       console.error('❌ Upload failed:', error)
