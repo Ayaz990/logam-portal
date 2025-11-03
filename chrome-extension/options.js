@@ -7,8 +7,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (result.apiUrl) {
     apiUrlInput.value = result.apiUrl
   } else {
-    // Default to localhost for development
-    apiUrlInput.value = 'http://localhost:3001'
+    // Default to production
+    apiUrlInput.value = 'https://logam-portal.vercel.app'
   }
 })
 

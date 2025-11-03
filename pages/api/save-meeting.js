@@ -1,4 +1,4 @@
-import { collection, addDoc } from 'firebase/firestore'
+import { collection, addDoc, doc, updateDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { getBaseUrl } from '@/lib/getBaseUrl'
 
@@ -46,49 +46,76 @@ export default async function handler(req, res) {
       fileSize,
       mimeType,
       meetingName,
-      duration
+      duration,
+      isRealtime,
+      status,
+      meetingId // For updating existing meetings
     } = req.body
 
-    // Validate required fields
-    if (!userId || !meetUrl || !timestamp || !videoUrl) {
+    // Validate required fields (videoUrl not required for initial real-time creation)
+    if (!userId || !meetUrl || !timestamp) {
       return res.status(400).json({
         error: 'Missing required fields',
-        required: ['userId', 'meetUrl', 'timestamp', 'videoUrl']
+        required: ['userId', 'meetUrl', 'timestamp']
       })
     }
 
     console.log('📝 Meeting details:')
     console.log('  - User:', userId)
     console.log('  - Meeting:', meetingName)
-    console.log('  - File size:', (fileSize / 1024 / 1024).toFixed(2), 'MB')
-    console.log('  - Video URL:', videoUrl)
+    console.log('  - File size:', fileSize ? (fileSize / 1024 / 1024).toFixed(2) + ' MB' : 'N/A (streaming)')
+    console.log('  - Video URL:', videoUrl || 'N/A (will be set later)')
+    console.log('  - Is realtime:', isRealtime || false)
 
-    // Save metadata to Firestore
-    const meetingData = {
-      userId: userId,
-      meetUrl,
-      timestamp: parseInt(timestamp),
-      videoUrl: videoUrl,
-      downloadURL: downloadURL || videoUrl,
-      fileName: fileName || `recordings/${timestamp}.webm`,
-      fileSize: fileSize || 0,
-      mimeType: mimeType || 'video/webm',
-      meetingName: meetingName || 'Untitled Meeting',
-      meetingTitle: meetingName || 'Untitled Meeting',
-      duration: duration ? parseInt(duration) : null,
-      transcript: {
-        status: 'pending',
-        text: null,
-        words: [],
-        confidence: null,
-        processedAt: null
-      },
-      createdAt: new Date(),
-      uploadMethod: 'direct-firebase' // Track that this used direct upload
+    let docRef
+
+    // Check if updating existing meeting or creating new one
+    if (meetingId) {
+      // Update existing meeting
+      console.log('🔄 Updating existing meeting:', meetingId)
+      const meetingRef = doc(db, 'meetings', meetingId)
+
+      await updateDoc(meetingRef, {
+        videoUrl: videoUrl || '',
+        downloadURL: downloadURL || videoUrl || '',
+        fileSize: fileSize || 0,
+        duration: duration ? parseInt(duration) : null,
+        status: status || 'completed',
+        updatedAt: new Date()
+      })
+
+      docRef = { id: meetingId }
+      console.log(`✅ Meeting updated: ${meetingId}`)
+    } else {
+      // Create new meeting
+      const meetingData = {
+        userId: userId,
+        meetUrl,
+        timestamp: parseInt(timestamp),
+        videoUrl: videoUrl || '',
+        downloadURL: downloadURL || videoUrl || '',
+        fileName: fileName || `recordings/${timestamp}.webm`,
+        fileSize: fileSize || 0,
+        mimeType: mimeType || 'video/webm',
+        meetingName: meetingName || 'Untitled Meeting',
+        meetingTitle: meetingName || 'Untitled Meeting',
+        duration: duration ? parseInt(duration) : null,
+        status: status || 'pending',
+        isRealtime: isRealtime || false,
+        transcript: {
+          status: isRealtime ? 'processing' : 'pending',
+          text: null,
+          words: [],
+          confidence: null,
+          processedAt: null
+        },
+        createdAt: new Date(),
+        uploadMethod: 'direct-firebase'
+      }
+
+      docRef = await addDoc(collection(db, 'meetings'), meetingData)
+      console.log(`✅ Meeting saved with ID: ${docRef.id}`)
     }
-
-    const docRef = await addDoc(collection(db, 'meetings'), meetingData)
-    console.log(`✅ Meeting saved with ID: ${docRef.id}`)
 
     // Return success immediately
     const response = {

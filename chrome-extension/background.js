@@ -1,6 +1,6 @@
 // Background script for the Chrome extension
 
-const BOT_SERVICE_URL = 'http://localhost:3001';
+const BOT_SERVICE_URL = 'https://logam-portal.vercel.app';
 
 chrome.runtime.onInstalled.addListener(() => {
   console.log('Logam Meet Recorder extension installed')
@@ -254,6 +254,6 @@ chrome.action.onClicked.addListener((tab) => {
   if (tab.url.includes('meet.google.com')) {
     chrome.tabs.sendMessage(tab.id, { action: 'toggleRecording' })
   } else {
-    chrome.tabs.create({ url: 'http://localhost:3001' })
+    chrome.tabs.create({ url: 'https://logam-portal.vercel.app' })
   }
 })

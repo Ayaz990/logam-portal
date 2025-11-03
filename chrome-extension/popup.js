@@ -47,7 +47,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
       // Get configured API URL
       const result = await chrome.storage.sync.get(['apiUrl'])
-      const apiUrl = result.apiUrl || 'http://localhost:3001'
+      const apiUrl = result.apiUrl || 'https://logam-portal.vercel.app'
 
       chrome.tabs.create({ url: apiUrl })
       window.close()

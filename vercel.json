@@ -14,6 +14,9 @@
     },
     "pages/api/manual-transcribe.js": {
       "maxDuration": 60
+    },
+    "pages/api/transcribe-chunk-stream.js": {
+      "maxDuration": 300
     }
   }
 }

@@ -33,13 +33,18 @@ ProfessionalRecorder.prototype.startRealtimeUpload = async function() {
     await this.firebaseUploader.startResumableUpload(this.fileName, 'video/webm')
 
     console.log('✅ Real-time upload session started')
-    this.updateStatus('Recording... (uploading in real-time)', 'recording')
+
+    // Create meeting entry immediately to get meetingId for real-time transcription
+    this.enableRealtimeTranscription = true
+    await this.createMeetingEntry()
+
+    this.updateStatus('Recording... (uploading & transcribing in real-time)', 'recording')
 
     // Show progress bar during recording
     this.progressContainer.style.display = 'block'
     this.progressBar.style.width = '0%'
     this.progressPercent.textContent = '0%'
-    this.progressText.textContent = 'Uploading...'
+    this.progressText.textContent = 'Uploading & transcribing...'
 
     // Upload chunks every 10 seconds
     this.uploadInterval = setInterval(() => {
@@ -47,10 +52,54 @@ ProfessionalRecorder.prototype.startRealtimeUpload = async function() {
     }, 10000) // 10 seconds
 
     console.log('⏱️ Chunk upload interval started (10 seconds)')
+    console.log('🎤 Real-time transcription enabled')
   } catch (error) {
     console.error('❌ Failed to start real-time upload:', error)
     this.chunkUploadEnabled = false
+    this.enableRealtimeTranscription = false
     this.updateStatus('Recording... (will upload after stop)', 'recording')
+  }
+}
+
+// Create meeting entry early for real-time transcription
+ProfessionalRecorder.prototype.createMeetingEntry = async function() {
+  try {
+    const meetingName = this.nameInput.value.trim() || 'Untitled Meeting'
+    const timestamp = this.startTime || Date.now()
+
+    console.log('💾 Creating meeting entry for real-time transcription...')
+
+    const response = await fetch(`${this.apiUrl}/api/save-meeting`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        userId: this.userId,
+        meetUrl: window.location.href,
+        timestamp: timestamp,
+        videoUrl: '', // Will be updated when finalized
+        downloadURL: '',
+        fileName: this.fileName,
+        fileSize: 0, // Will be updated
+        mimeType: 'video/webm',
+        meetingName: meetingName,
+        duration: 0, // Will be updated
+        isRealtime: true,
+        status: 'recording'
+      })
+    })
+
+    if (response.ok) {
+      const result = await response.json()
+      this.meetingId = result.id
+      console.log('✅ Meeting entry created:', this.meetingId)
+    } else {
+      throw new Error('Failed to create meeting entry')
+    }
+  } catch (error) {
+    console.error('❌ Failed to create meeting entry:', error)
+    this.enableRealtimeTranscription = false
   }
 }
 
@@ -73,14 +122,73 @@ ProfessionalRecorder.prototype.uploadPendingChunks = async function() {
     await this.firebaseUploader.uploadChunk(blob, false, (totalProgress) => {
       this.progressBar.style.width = totalProgress + '%'
       this.progressPercent.textContent = totalProgress + '%'
+      this.progressText.textContent = 'Uploading & transcribing...'
     })
 
     console.log('✅ Chunks uploaded successfully')
+
+    // Trigger real-time transcription for this chunk (don't wait)
+    if (!this.chunkIndex) this.chunkIndex = 0
+    this.chunkIndex++
+
+    this.triggerChunkTranscription(blob, this.chunkIndex).catch(err => {
+      console.error('⚠️ Chunk transcription failed:', err)
+      // Don't fail upload if transcription fails
+    })
+
     this.isUploading = false
   } catch (error) {
     console.error('❌ Chunk upload failed:', error)
     this.isUploading = false
     // Continue recording even if upload fails
+  }
+}
+
+// Trigger real-time transcription for uploaded chunk
+ProfessionalRecorder.prototype.triggerChunkTranscription = async function(chunkBlob, chunkIndex) {
+  try {
+    if (!this.meetingId || !this.enableRealtimeTranscription) {
+      return // Skip if meeting not created yet or disabled
+    }
+
+    console.log(`🎤 Triggering transcription for chunk ${chunkIndex}...`)
+
+    // Upload chunk to temporary location for transcription
+    const chunkFileName = `temp-chunks/${this.fileName.replace('recordings/', '')}-chunk-${chunkIndex}.webm`
+    const chunkUploader = new FirebaseUploader(window.firebaseConfig)
+
+    const chunkUrl = await chunkUploader.uploadFile(chunkBlob, chunkFileName)
+    console.log('✅ Chunk uploaded for transcription:', chunkUrl)
+
+    // Trigger transcription
+    const response = await fetch(`${this.apiUrl}/api/transcribe-chunk-stream`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        meetingId: this.meetingId,
+        chunkUrl: chunkUrl,
+        chunkIndex: chunkIndex,
+        isLastChunk: false
+      })
+    })
+
+    if (response.ok) {
+      const result = await response.json()
+      console.log(`✅ Chunk ${chunkIndex} transcribed:`, result.transcriptLength, 'chars')
+
+      // Update status to show progress
+      if (result.transcriptLength > 0) {
+        this.updateStatus(`Recording... (${result.transcriptLength} chars transcribed)`, 'recording')
+      }
+    } else {
+      console.error('❌ Transcription failed:', await response.text())
+    }
+
+  } catch (error) {
+    console.error('❌ Chunk transcription error:', error)
+    // Don't throw - let recording continue
   }
 }
 
