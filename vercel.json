@@ -11,6 +11,9 @@
     },
     "pages/api/save-meeting.js": {
       "maxDuration": 60
+    },
+    "pages/api/manual-transcribe.js": {
+      "maxDuration": 60
     }
   }
 }
