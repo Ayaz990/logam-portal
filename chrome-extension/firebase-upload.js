@@ -11,7 +11,6 @@ class FirebaseUploader {
     this.uploadedBytes = 0
     this.totalBytes = 0
     this.fileName = null
-    this.chunks = []
   }
 
   /**
@@ -75,30 +74,29 @@ class FirebaseUploader {
         throw new Error('No upload session started')
       }
 
-      this.chunks.push(chunk)
-      this.totalBytes += chunk.size
+      const chunkSize = chunk.size
+      const currentOffset = this.uploadedBytes
 
-      console.log(`📤 Uploading chunk: ${(chunk.size / 1024).toFixed(2)} KB, Total: ${(this.totalBytes / 1024 / 1024).toFixed(2)} MB`)
+      console.log(`📤 Uploading chunk: ${(chunkSize / 1024).toFixed(2)} KB at offset ${(currentOffset / 1024 / 1024).toFixed(2)} MB`)
 
-      // Create combined blob from all chunks so far
-      const combinedBlob = new Blob(this.chunks, { type: 'video/webm' })
-
-      // Upload using PUT with range headers
+      // Upload using PUT with correct range headers
       const xhr = new XMLHttpRequest()
 
       return new Promise((resolve, reject) => {
         xhr.upload.addEventListener('progress', (e) => {
           if (e.lengthComputable && onProgress) {
             const chunkProgress = Math.round((e.loaded / e.total) * 100)
-            const totalProgress = Math.round((this.uploadedBytes + e.loaded) / this.totalBytes * 100)
+            const totalBytes = currentOffset + chunkSize
+            const totalProgress = Math.round((currentOffset + e.loaded) / totalBytes * 100)
             onProgress(totalProgress, chunkProgress)
           }
         })
 
         xhr.addEventListener('load', () => {
           if (xhr.status === 200 || xhr.status === 201) {
-            console.log('✅ Chunk uploaded successfully')
-            this.uploadedBytes = this.totalBytes
+            console.log('✅ Final chunk uploaded successfully')
+            this.uploadedBytes += chunkSize
+            this.totalBytes = this.uploadedBytes
 
             if (isFinal) {
               console.log('🎉 Upload complete!')
@@ -109,7 +107,8 @@ class FirebaseUploader {
           } else if (xhr.status === 308) {
             // Resume incomplete - this is normal for chunked uploads
             console.log('⏸️ Chunk uploaded, continuing...')
-            this.uploadedBytes += chunk.size
+            this.uploadedBytes += chunkSize
+            this.totalBytes = this.uploadedBytes
             resolve(false)
           } else {
             reject(new Error(`Upload failed with status ${xhr.status}: ${xhr.responseText}`))
@@ -122,16 +121,17 @@ class FirebaseUploader {
 
         xhr.open('PUT', this.uploadSessionUrl)
 
+        // Set correct offset for resumable upload
         if (isFinal) {
           xhr.setRequestHeader('X-Goog-Upload-Command', 'upload, finalize')
-          xhr.setRequestHeader('X-Goog-Upload-Offset', '0')
+          xhr.setRequestHeader('X-Goog-Upload-Offset', currentOffset.toString())
         } else {
           xhr.setRequestHeader('X-Goog-Upload-Command', 'upload')
-          xhr.setRequestHeader('X-Goog-Upload-Offset', '0')
+          xhr.setRequestHeader('X-Goog-Upload-Offset', currentOffset.toString())
         }
 
         xhr.setRequestHeader('Content-Type', 'video/webm')
-        xhr.send(combinedBlob)
+        xhr.send(chunk) // Send only the current chunk, not all previous chunks
       })
     } catch (error) {
       console.error('❌ Chunk upload error:', error)
@@ -156,7 +156,6 @@ class FirebaseUploader {
       this.uploadSessionUrl = null
       this.uploadedBytes = 0
       this.totalBytes = 0
-      this.chunks = []
 
       return downloadUrl
     } catch (error) {

@@ -11,6 +11,9 @@ ProfessionalRecorder.prototype.start = async function() {
   this.isUploading = false
   this.fileName = `recordings/${Date.now()}.webm`
   this.chunkUploadEnabled = true
+  this.chunkIndex = 0
+  this.transcriptionQueue = []
+  this.isTranscribing = false
 
   // Call original start
   await originalStart.call(this)
@@ -127,14 +130,12 @@ ProfessionalRecorder.prototype.uploadPendingChunks = async function() {
 
     console.log('✅ Chunks uploaded successfully')
 
-    // Trigger real-time transcription for this chunk (don't wait)
-    if (!this.chunkIndex) this.chunkIndex = 0
-    this.chunkIndex++
+    // Clear uploaded chunks to free memory
+    this.chunks = []
 
-    this.triggerChunkTranscription(blob, this.chunkIndex).catch(err => {
-      console.error('⚠️ Chunk transcription failed:', err)
-      // Don't fail upload if transcription fails
-    })
+    // Queue transcription for this chunk
+    this.chunkIndex++
+    this.queueChunkTranscription(blob, this.chunkIndex, false)
 
     this.isUploading = false
   } catch (error) {
@@ -144,14 +145,38 @@ ProfessionalRecorder.prototype.uploadPendingChunks = async function() {
   }
 }
 
-// Trigger real-time transcription for uploaded chunk
-ProfessionalRecorder.prototype.triggerChunkTranscription = async function(chunkBlob, chunkIndex) {
+// Queue a chunk for transcription
+ProfessionalRecorder.prototype.queueChunkTranscription = function(chunkBlob, chunkIndex, isLastChunk) {
+  this.transcriptionQueue.push({ chunkBlob, chunkIndex, isLastChunk })
+  this.processTranscriptionQueue()
+}
+
+// Process transcription queue sequentially
+ProfessionalRecorder.prototype.processTranscriptionQueue = async function() {
+  if (this.isTranscribing || this.transcriptionQueue.length === 0) {
+    return
+  }
+
+  this.isTranscribing = true
+
+  while (this.transcriptionQueue.length > 0) {
+    const { chunkBlob, chunkIndex, isLastChunk } = this.transcriptionQueue.shift()
+    await this.triggerChunkTranscription(chunkBlob, chunkIndex, isLastChunk)
+  }
+
+  this.isTranscribing = false
+}
+
+// Trigger real-time transcription for uploaded chunk with retry
+ProfessionalRecorder.prototype.triggerChunkTranscription = async function(chunkBlob, chunkIndex, isLastChunk, retryCount = 0) {
+  const maxRetries = 3
+
   try {
     if (!this.meetingId || !this.enableRealtimeTranscription) {
       return // Skip if meeting not created yet or disabled
     }
 
-    console.log(`🎤 Triggering transcription for chunk ${chunkIndex}...`)
+    console.log(`🎤 Triggering transcription for chunk ${chunkIndex}... ${isLastChunk ? '(LAST CHUNK)' : ''}`)
 
     // Upload chunk to temporary location for transcription
     const chunkFileName = `temp-chunks/${this.fileName.replace('recordings/', '')}-chunk-${chunkIndex}.webm`
@@ -170,7 +195,7 @@ ProfessionalRecorder.prototype.triggerChunkTranscription = async function(chunkB
         meetingId: this.meetingId,
         chunkUrl: chunkUrl,
         chunkIndex: chunkIndex,
-        isLastChunk: false
+        isLastChunk: isLastChunk
       })
     })
 
@@ -180,15 +205,28 @@ ProfessionalRecorder.prototype.triggerChunkTranscription = async function(chunkB
 
       // Update status to show progress
       if (result.transcriptLength > 0) {
-        this.updateStatus(`Recording... (${result.transcriptLength} chars transcribed)`, 'recording')
+        const statusMessage = isLastChunk
+          ? `Finalizing... (${result.transcriptLength} chars, generating summary...)`
+          : `Recording... (${result.transcriptLength} chars transcribed)`
+        this.updateStatus(statusMessage, 'recording')
       }
     } else {
-      console.error('❌ Transcription failed:', await response.text())
+      const errorText = await response.text()
+      throw new Error(`Transcription API failed: ${response.status} - ${errorText}`)
     }
 
   } catch (error) {
-    console.error('❌ Chunk transcription error:', error)
-    // Don't throw - let recording continue
+    console.error(`❌ Chunk ${chunkIndex} transcription error (attempt ${retryCount + 1}/${maxRetries}):`, error)
+
+    // Retry logic
+    if (retryCount < maxRetries) {
+      console.log(`🔄 Retrying chunk ${chunkIndex} in 3 seconds...`)
+      await new Promise(resolve => setTimeout(resolve, 3000))
+      return this.triggerChunkTranscription(chunkBlob, chunkIndex, isLastChunk, retryCount + 1)
+    } else {
+      console.error(`❌ Chunk ${chunkIndex} transcription failed after ${maxRetries} attempts`)
+      // Don't throw - let recording continue
+    }
   }
 }
 
@@ -216,7 +254,7 @@ ProfessionalRecorder.prototype.uploadToFirebase = async function() {
       this.updateRecordButton('uploading')
       this.updateStatus('Finalizing upload...', 'info')
 
-      // Upload any remaining chunks
+      // Upload any remaining chunks and mark as final
       if (this.chunks.length > 0 && !this.isUploading) {
         const blob = new Blob(this.chunks, { type: 'video/webm' })
         console.log(`📤 Uploading final chunks: ${(blob.size / 1024 / 1024).toFixed(2)} MB`)
@@ -225,6 +263,40 @@ ProfessionalRecorder.prototype.uploadToFirebase = async function() {
           this.progressBar.style.width = totalProgress + '%'
           this.progressPercent.textContent = totalProgress + '%'
         })
+
+        // Clear uploaded chunks
+        this.chunks = []
+
+        // Queue last chunk for transcription with isLastChunk flag
+        this.chunkIndex++
+        this.queueChunkTranscription(blob, this.chunkIndex, true)
+        console.log('🎯 Queued last chunk for transcription and summary generation')
+      } else if (this.chunkIndex > 0) {
+        // If no remaining chunks but we have uploaded chunks, mark the last uploaded one
+        console.log('🎯 Marking previous chunk as last chunk for summary generation')
+        // Trigger a final API call to mark completion
+        if (this.meetingId && this.enableRealtimeTranscription) {
+          try {
+            const response = await fetch(`${this.apiUrl}/api/transcribe-chunk-stream`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                meetingId: this.meetingId,
+                chunkUrl: '', // Empty URL to signal just marking as complete
+                chunkIndex: this.chunkIndex,
+                isLastChunk: true,
+                markCompleteOnly: true
+              })
+            })
+            if (response.ok) {
+              console.log('✅ Meeting marked as complete, summary generation triggered')
+            }
+          } catch (err) {
+            console.error('⚠️ Failed to mark meeting as complete:', err)
+          }
+        }
       }
 
       // Get download URL
@@ -241,7 +313,7 @@ ProfessionalRecorder.prototype.uploadToFirebase = async function() {
       this.recordBtn.disabled = false
 
       this.updateRecordButton('success')
-      this.updateStatus('Recording saved! (uploaded in real-time)', 'success')
+      this.updateStatus('Recording saved! Transcript will be ready in ~10 seconds', 'success')
 
       setTimeout(() => {
         this.progressContainer.style.display = 'none'

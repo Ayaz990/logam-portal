@@ -30,29 +30,32 @@ class ProfessionalRecorder {
   }
 
   createUI() {
-    // Create main container with Shadcn-style design
+    // Create main container with minimal design - positioned at bottom-left to avoid overlap
     const container = document.createElement('div')
     container.id = 'professional-recorder'
     container.style.cssText = `
       position: fixed !important;
-      top: 20px !important;
-      right: 20px !important;
+      bottom: 20px !important;
+      left: 20px !important;
       z-index: 99999 !important;
-      width: 320px !important;
-      background: white !important;
+      width: 280px !important;
+      background: rgba(255, 255, 255, 0.98) !important;
       border: 1px solid hsl(214.3 31.8% 91.4%) !important;
       border-radius: 12px !important;
-      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04) !important;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08) !important;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
-      backdrop-filter: blur(10px) !important;
-      -webkit-backdrop-filter: blur(10px) !important;
+      backdrop-filter: blur(20px) !important;
+      -webkit-backdrop-filter: blur(20px) !important;
+      transition: transform 0.3s ease, opacity 0.3s ease !important;
     `
 
-    // Header
+    // Compact Header
     const header = document.createElement('div')
     header.style.cssText = `
-      padding: 16px 20px 12px 20px !important;
+      padding: 12px 16px !important;
       border-bottom: 1px solid hsl(214.3 31.8% 91.4%) !important;
+      cursor: pointer !important;
+      user-select: none !important;
     `
 
     const headerTitle = document.createElement('div')
@@ -61,7 +64,6 @@ class ProfessionalRecorder {
       align-items: center !important;
       justify-content: space-between !important;
       gap: 8px !important;
-      margin-bottom: 4px !important;
     `
 
     const titleLeft = document.createElement('div')
@@ -73,9 +75,9 @@ class ProfessionalRecorder {
 
     const titleIcon = document.createElement('div')
     titleIcon.innerHTML = `
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <polygon points="23 7 16 12 23 17 23 7"/>
-        <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/>
+        <circle cx="12" cy="12" r="2" fill="currentColor"/>
       </svg>
     `
     titleIcon.style.cssText = `
@@ -83,10 +85,10 @@ class ProfessionalRecorder {
     `
 
     const title = document.createElement('h3')
-    title.textContent = 'Meet Recorder'
+    title.textContent = 'Logam Recorder'
     title.style.cssText = `
       margin: 0 !important;
-      font-size: 16px !important;
+      font-size: 14px !important;
       font-weight: 600 !important;
       color: hsl(222.2 84% 4.9%) !important;
     `
@@ -103,28 +105,26 @@ class ProfessionalRecorder {
       transition: all 0.2s ease !important;
     `
     this.collapseBtn.innerHTML = `
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <polyline points="6,9 12,15 18,9"/>
       </svg>
     `
 
     this.collapseBtn.addEventListener('mouseenter', () => {
-      this.collapseBtn.style.background = 'hsl(210 40% 98%) !important'
+      this.collapseBtn.style.background = 'hsl(210 40% 96%) !important'
     })
     this.collapseBtn.addEventListener('mouseleave', () => {
       this.collapseBtn.style.background = 'none !important'
     })
-    this.collapseBtn.addEventListener('click', () => {
+    this.collapseBtn.addEventListener('click', (e) => {
+      e.stopPropagation()
       this.toggleCollapse()
     })
 
-    const subtitle = document.createElement('p')
-    subtitle.textContent = 'Record meetings with audio & video'
-    subtitle.style.cssText = `
-      margin: 0 !important;
-      font-size: 13px !important;
-      color: hsl(215.4 16.3% 46.9%) !important;
-    `
+    // Make entire header clickable to toggle
+    header.addEventListener('click', () => {
+      this.toggleCollapse()
+    })
 
     titleLeft.appendChild(titleIcon)
     titleLeft.appendChild(title)
@@ -132,22 +132,20 @@ class ProfessionalRecorder {
     headerTitle.appendChild(this.collapseBtn)
     header.appendChild(headerTitle)
 
-    this.subtitle = subtitle
-    header.appendChild(subtitle)
-
-    // Collapsible content container
+    // Collapsible content container - start collapsed
     this.collapsibleContent = document.createElement('div')
     this.collapsibleContent.style.cssText = `
       overflow: hidden !important;
-      transition: max-height 0.3s ease, opacity 0.3s ease !important;
-      max-height: 1000px !important;
-      opacity: 1 !important;
+      transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease !important;
+      max-height: 0 !important;
+      opacity: 0 !important;
+      display: none !important;
     `
 
     // Status section
     const statusSection = document.createElement('div')
     statusSection.style.cssText = `
-      padding: 16px 20px !important;
+      padding: 12px 16px !important;
     `
 
     // Status indicator
@@ -609,27 +607,41 @@ class ProfessionalRecorder {
   }
 
   updateCollapseState() {
-    const collapseIcon = this.collapseBtn.querySelector('div')
+    const collapseIcon = this.collapseBtn.querySelector('svg')
 
     if (this.collapsed) {
+      // Collapse animation
       this.collapsibleContent.style.maxHeight = '0'
       this.collapsibleContent.style.opacity = '0'
-      collapseIcon.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6,9 12,15 18,9"/></svg>`
+      collapseIcon.innerHTML = `<polyline points="6,9 12,15 18,9"/>`
+
+      // Clear any existing timeout to prevent multiple timeouts
+      if (this.collapseTimeout) {
+        clearTimeout(this.collapseTimeout)
+      }
 
       // After animation, hide completely
-      setTimeout(() => {
+      this.collapseTimeout = setTimeout(() => {
         if (this.collapsed) {
           this.collapsibleContent.style.display = 'none'
         }
+        this.collapseTimeout = null
       }, 300)
     } else {
+      // Expand animation
+      // Clear any existing timeout
+      if (this.collapseTimeout) {
+        clearTimeout(this.collapseTimeout)
+        this.collapseTimeout = null
+      }
+
       this.collapsibleContent.style.display = 'block'
       // Allow reflow
       requestAnimationFrame(() => {
-        this.collapsibleContent.style.maxHeight = '1000px'
+        this.collapsibleContent.style.maxHeight = '800px'
         this.collapsibleContent.style.opacity = '1'
       })
-      collapseIcon.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18,15 12,9 6,15"/></svg>`
+      collapseIcon.innerHTML = `<polyline points="18,15 12,9 6,15"/>`
     }
   }
 

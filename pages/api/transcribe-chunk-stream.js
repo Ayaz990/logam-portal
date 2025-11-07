@@ -21,12 +21,109 @@ export default async function handler(req, res) {
   try {
     console.log('🎤 Real-time chunk transcription request')
 
-    const { meetingId, chunkUrl, chunkIndex, isLastChunk } = req.body
+    const { meetingId, chunkUrl, chunkIndex, isLastChunk, markCompleteOnly } = req.body
 
-    if (!meetingId || !chunkUrl) {
+    if (!meetingId) {
       return res.status(400).json({
-        error: 'Missing required fields',
-        required: ['meetingId', 'chunkUrl']
+        error: 'Missing required field: meetingId'
+      })
+    }
+
+    // Handle mark complete only request (no chunk to transcribe, just generate summary)
+    if (markCompleteOnly && isLastChunk) {
+      console.log(`🎯 Mark complete only request for meeting: ${meetingId}`)
+
+      const meetingRef = doc(db, 'meetings', meetingId)
+      const meetingSnap = await getDoc(meetingRef)
+
+      if (!meetingSnap.exists()) {
+        return res.status(404).json({ error: 'Meeting not found' })
+      }
+
+      const meetingData = meetingSnap.data()
+      const currentTranscript = meetingData.transcript || {}
+      const fullText = currentTranscript.text || ''
+
+      if (!fullText) {
+        console.log('⚠️ No transcript text found, skipping summary')
+        await updateDoc(meetingRef, {
+          'transcript.status': 'completed',
+          'transcript.completedAt': new Date()
+        })
+        return res.status(200).json({
+          success: true,
+          message: 'Meeting marked as complete (no text to summarize)'
+        })
+      }
+
+      // Generate summary
+      console.log('🎯 Generating summary for completed meeting...')
+      try {
+        const groqApiKey = process.env.GROQ_API_KEY
+        const detectedLanguage = currentTranscript.language || 'en'
+        console.log(`🌍 Generating summary in detected language: ${detectedLanguage}`)
+
+        const systemPrompt = detectedLanguage === 'en'
+          ? 'You are a meeting summarizer. Create a concise, structured summary of the meeting transcript. Include key points, decisions, and action items.'
+          : `You are a meeting summarizer. Create a concise, structured summary of the meeting transcript in the same language as the transcript (${detectedLanguage}). Include key points, decisions, and action items.`
+
+        const summaryResponse = await axios.post(
+          'https://api.groq.com/openai/v1/chat/completions',
+          {
+            model: 'llama-3.3-70b-versatile',
+            messages: [
+              {
+                role: 'system',
+                content: systemPrompt
+              },
+              {
+                role: 'user',
+                content: `Summarize this meeting transcript:\n\n${fullText}`
+              }
+            ],
+            temperature: 0.5,
+            max_tokens: 1500
+          },
+          {
+            headers: {
+              'Authorization': `Bearer ${groqApiKey}`,
+              'Content-Type': 'application/json'
+            }
+          }
+        )
+
+        const summary = summaryResponse.data.choices[0].message.content
+
+        await updateDoc(meetingRef, {
+          'transcript.summary': summary,
+          'transcript.status': 'completed',
+          'transcript.completedAt': new Date()
+        })
+
+        console.log('✅ Summary generated and meeting marked complete')
+
+        return res.status(200).json({
+          success: true,
+          message: 'Meeting completed with summary',
+          summaryLength: summary.length
+        })
+      } catch (summaryError) {
+        console.error('❌ Summary generation failed:', summaryError.message)
+        await updateDoc(meetingRef, {
+          'transcript.status': 'completed',
+          'transcript.summaryError': summaryError.message,
+          'transcript.completedAt': new Date()
+        })
+        return res.status(200).json({
+          success: true,
+          message: 'Meeting marked complete (summary failed)'
+        })
+      }
+    }
+
+    if (!chunkUrl) {
+      return res.status(400).json({
+        error: 'Missing required field: chunkUrl'
       })
     }
 
@@ -71,10 +168,11 @@ export default async function handler(req, res) {
       filename: `chunk-${chunkIndex}.webm`,
       contentType: 'video/webm'
     })
-    formData.append('model', 'whisper-large-v3')
-    formData.append('language', 'en') // Auto-detect or specify
+    formData.append('model', 'whisper-large-v3-turbo') // Faster and more accurate
+    // Don't specify language - let Whisper auto-detect for better multilingual support
     formData.append('response_format', 'verbose_json')
     formData.append('timestamp_granularities[]', 'word')
+    formData.append('temperature', '0') // Lower temperature for better accuracy
 
     const transcribeResponse = await axios.post(
       'https://api.groq.com/openai/v1/audio/transcriptions',
@@ -86,13 +184,15 @@ export default async function handler(req, res) {
         },
         maxContentLength: Infinity,
         maxBodyLength: Infinity,
-        timeout: 120000, // 2 minutes
+        timeout: 180000, // 3 minutes for better processing
       }
     )
 
     const transcription = transcribeResponse.data
+    const detectedLanguage = transcription.language || 'unknown'
     console.log('✅ Chunk transcribed successfully')
     console.log(`📊 Chunk text length: ${transcription.text?.length || 0} characters`)
+    console.log(`🌍 Detected language: ${detectedLanguage}`)
 
     // Get existing transcript data
     const currentTranscript = meetingData.transcript || {
@@ -154,23 +254,32 @@ export default async function handler(req, res) {
       console.log('🎯 Last chunk - generating summary...')
 
       try {
-        // Generate summary using Groq
+        // Detect the primary language of the transcript
+        const detectedLanguage = transcriptUpdate.language || 'en'
+        console.log(`🌍 Generating summary in detected language: ${detectedLanguage}`)
+
+        // Language-aware system prompt
+        const systemPrompt = detectedLanguage === 'en'
+          ? 'You are a meeting summarizer. Create a concise, structured summary of the meeting transcript. Include key points, decisions, and action items.'
+          : `You are a meeting summarizer. Create a concise, structured summary of the meeting transcript in the same language as the transcript (${detectedLanguage}). Include key points, decisions, and action items.`
+
+        // Generate summary using Groq with language awareness
         const summaryResponse = await axios.post(
           'https://api.groq.com/openai/v1/chat/completions',
           {
-            model: 'llama-3.1-70b-versatile',
+            model: 'llama-3.3-70b-versatile',
             messages: [
               {
                 role: 'system',
-                content: 'You are a meeting summarizer. Create a concise, structured summary of the meeting transcript. Include key points, decisions, and action items.'
+                content: systemPrompt
               },
               {
                 role: 'user',
                 content: `Summarize this meeting transcript:\n\n${fullText}`
               }
             ],
-            temperature: 0.7,
-            max_tokens: 1000
+            temperature: 0.5,
+            max_tokens: 1500
           },
           {
             headers: {
