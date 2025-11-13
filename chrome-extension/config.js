@@ -1,5 +1,5 @@
 // Centralized API configuration
-const DEFAULT_API_URL = 'https://logam-portal.vercel.app' // Production URL
+const DEFAULT_API_URL = 'https://logam-portal-production.up.railway.app' // Production URL
 
 async function getApiUrl() {
   // Check if user has configured a custom URL in settings

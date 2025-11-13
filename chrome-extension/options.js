@@ -8,7 +8,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     apiUrlInput.value = result.apiUrl
   } else {
     // Default to production
-    apiUrlInput.value = 'https://logam-portal.vercel.app'
+    apiUrlInput.value = 'https://logam-portal-production.up.railway.app'
   }
 })
 
