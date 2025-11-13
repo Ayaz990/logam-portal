@@ -18,7 +18,7 @@
   "content_scripts": [
     {
       "matches": ["https://meet.google.com/*"],
-      "js": ["config.js", "firebase-config.js", "firebase-upload.js", "recorder-ui.js", "realtime-upload-patch.js"],
+      "js": ["config.js", "firebase-config.js", "firebase-upload.js", "recorder-ui.js"],
       "css": ["styles-new.css"]
     }
   ],

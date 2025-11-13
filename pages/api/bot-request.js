@@ -8,7 +8,7 @@ export default async function handler(req, res) {
   const allowedOrigins = [
     'https://meet.google.com',
     'http://localhost:3001',
-    'https://logam-portal.vercel.app'
+    'https://logam-portal-production.up.railway.app'
   ]
 
   const origin = req.headers.origin
