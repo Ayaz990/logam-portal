@@ -13,6 +13,7 @@ class ProfessionalRecorder {
     this.meetingDetected = false
     this.meetingObserver = null
     this.lastParticipantCount = 0
+    this.micStream = null
     this.screenStream = null
     this.uploadRetries = 0
     this.maxUploadRetries = 3
@@ -817,9 +818,28 @@ class ProfessionalRecorder {
 
       this.updateStatus('Requesting permissions...', 'info')
 
-      // Get screen/tab with audio
-      console.log('🖥️ Getting tab capture...')
-      this.updateStatus('Select "Chrome Tab" and check "Share audio"...', 'info')
+      // Step 1: Get microphone for your voice
+      console.log('🎤 Getting microphone access...')
+      this.updateStatus('Allow microphone access...', 'info')
+
+      try {
+        this.micStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            sampleRate: 48000,
+            channelCount: 2,
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: false
+          }
+        })
+        console.log('✅ Microphone granted')
+      } catch (micError) {
+        throw new Error('Microphone access denied. Please allow microphone.')
+      }
+
+      // Step 2: Get screen/tab with system audio (other participants)
+      console.log('🖥️ Getting screen with audio...')
+      this.updateStatus('Select tab and check "Share audio"...', 'info')
 
       try {
         this.screenStream = await navigator.mediaDevices.getDisplayMedia({
@@ -835,27 +855,49 @@ class ProfessionalRecorder {
             noiseSuppression: false,
             autoGainControl: false
           },
-          preferCurrentTab: true // Hint to prefer current tab
+          preferCurrentTab: true
         })
       } catch (screenError) {
-        throw new Error('Screen sharing cancelled. Please select "Chrome Tab" and enable "Share audio".')
+        // Clean up mic
+        if (this.micStream) {
+          this.micStream.getTracks().forEach(track => track.stop())
+        }
+        throw new Error('Screen sharing cancelled. Please select tab and enable "Share audio".')
       }
 
       this.updateIndicator(this.videoIndicator, true)
       console.log('✅ Screen sharing granted')
 
-      // Check if audio is included
-      const audioTracks = this.screenStream.getAudioTracks()
-      if (audioTracks.length > 0) {
+      // Step 3: Mix microphone + system audio
+      this.updateStatus('Mixing audio sources...', 'info')
+
+      const audioContext = new AudioContext()
+      const destination = audioContext.createMediaStreamDestination()
+
+      // Add microphone (your voice)
+      const micSource = audioContext.createMediaStreamSource(this.micStream)
+      micSource.connect(destination)
+      console.log('✅ Microphone audio connected')
+
+      // Add system audio if available (other participants)
+      const systemAudioTracks = this.screenStream.getAudioTracks()
+      if (systemAudioTracks.length > 0) {
+        const systemSource = audioContext.createMediaStreamSource(
+          new MediaStream(systemAudioTracks)
+        )
+        systemSource.connect(destination)
+        console.log('✅ System audio connected')
         this.updateIndicator(this.audioIndicator, true)
-        console.log('✅ Tab audio included')
       } else {
-        console.warn('⚠️ No audio track detected. Make sure you selected "Chrome Tab" and checked "Share audio"')
-        this.updateStatus('Warning: No audio detected. Please ensure "Share audio" was checked.', 'warning')
+        console.warn('⚠️ No system audio detected - only microphone will be recorded')
+        this.updateIndicator(this.audioIndicator, true)
       }
 
-      // Use the screen stream directly (no need to mix audio)
-      const combinedStream = this.screenStream
+      // Step 4: Combine video + mixed audio
+      const combinedStream = new MediaStream([
+        ...this.screenStream.getVideoTracks(),
+        ...destination.stream.getAudioTracks()
+      ])
 
       console.log('🎵 Combined stream created')
       console.log('- Video tracks:', combinedStream.getVideoTracks().length)
@@ -1064,6 +1106,10 @@ class ProfessionalRecorder {
   }
 
   cleanupStreams() {
+    if (this.micStream) {
+      this.micStream.getTracks().forEach(track => track.stop())
+      this.micStream = null
+    }
     if (this.screenStream) {
       this.screenStream.getTracks().forEach(track => track.stop())
       this.screenStream = null
