@@ -24,6 +24,12 @@ class ProfessionalRecorder {
     this.participantStableTime = null
     this.meetingEndTime = null
 
+    // Real-time transcription
+    this.transcriptionWs = null
+    this.transcriptionEnabled = true
+    this.transcriptText = []
+    this.audioRecorder = null
+
     this.createUI()
     this.setupAutoRecording()
     this.setupKeyboardShortcuts()
@@ -209,6 +215,23 @@ class ProfessionalRecorder {
     `
     this.sizeDiv.textContent = '0 MB'
 
+    // Real-time transcript display
+    this.transcriptDiv = document.createElement('div')
+    this.transcriptDiv.style.cssText = `
+      max-height: 120px !important;
+      overflow-y: auto !important;
+      padding: 12px !important;
+      background: hsl(210 40% 98%) !important;
+      border: 1px solid hsl(214.3 31.8% 91.4%) !important;
+      border-radius: 6px !important;
+      margin-bottom: 16px !important;
+      font-size: 12px !important;
+      line-height: 1.5 !important;
+      color: hsl(222.2 84% 4.9%) !important;
+      display: none !important;
+    `
+    this.transcriptDiv.textContent = 'Waiting for speech...'
+
     // Progress bar (hidden by default)
     this.progressContainer = document.createElement('div')
     this.progressContainer.style.cssText = `
@@ -258,6 +281,7 @@ class ProfessionalRecorder {
     statusSection.appendChild(this.statusDiv)
     statusSection.appendChild(this.timerDiv)
     statusSection.appendChild(this.sizeDiv)
+    statusSection.appendChild(this.transcriptDiv)
     statusSection.appendChild(this.progressContainer)
 
     // Controls section
@@ -933,12 +957,137 @@ class ProfessionalRecorder {
       this.statusDiv.style.animation = 'pulse 2s ease-in-out infinite'
       this.addPulseAnimation()
 
+      // Start real-time transcription
+      if (this.transcriptionEnabled) {
+        this.startRealtimeTranscription()
+      }
+
       console.log('✅ Recording started')
 
     } catch (err) {
       console.error('❌ Error:', err)
       this.handleRecordingError(err.message || 'Failed to start recording')
       this.cleanupStreams()
+    }
+  }
+
+  async startRealtimeTranscription() {
+    try {
+      console.log('🎤 Starting real-time transcription...')
+
+      // Show transcript UI
+      this.transcriptDiv.style.display = 'block'
+      this.transcriptDiv.textContent = 'Connecting to transcription service...'
+      this.transcriptText = []
+
+      // Get API URL
+      const apiUrl = await getApiUrl()
+
+      // First, start the WebSocket server by calling the API
+      try {
+        const initResponse = await fetch(`${apiUrl}/api/transcribe-realtime`, {
+          credentials: 'include'
+        })
+        const initData = await initResponse.json()
+        console.log('🎤 Transcription server status:', initData)
+      } catch (err) {
+        console.warn('⚠️ Could not initialize transcription server:', err)
+      }
+
+      // Connect to WebSocket server
+      // Auto-detect environment: use Railway in production, localhost in development
+      const PRODUCTION_WS_URL = 'wss://YOUR_RAILWAY_APP_URL'  // Update this after Railway deployment
+      const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+      const wsUrl = isDevelopment ? 'ws://localhost:8080' : PRODUCTION_WS_URL
+      console.log('🔌 Connecting to:', wsUrl, `(${isDevelopment ? 'development' : 'production'})`)
+
+      // Connect to WebSocket server
+      this.transcriptionWs = new WebSocket(wsUrl)
+
+      this.transcriptionWs.onopen = () => {
+        console.log('✅ Transcription WebSocket connected')
+        this.transcriptDiv.textContent = 'Listening for speech...'
+      }
+
+      this.transcriptionWs.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data)
+
+          if (data.type === 'ready') {
+            console.log('✅ Transcription service ready:', data.model)
+          } else if (data.type === 'transcript' && data.text) {
+            // Add new transcript text
+            this.transcriptText.push(data.text)
+
+            // Update display (show last 5 segments)
+            const recentText = this.transcriptText.slice(-5).join(' ')
+            this.transcriptDiv.textContent = recentText
+
+            // Auto-scroll to bottom
+            this.transcriptDiv.scrollTop = this.transcriptDiv.scrollHeight
+
+            console.log('📝 Transcript:', data.text)
+          } else if (data.type === 'error') {
+            console.error('❌ Transcription error:', data.message)
+          }
+        } catch (err) {
+          console.error('❌ Error parsing transcript data:', err)
+        }
+      }
+
+      this.transcriptionWs.onerror = (error) => {
+        console.error('❌ Transcription WebSocket error:', error)
+        this.transcriptDiv.textContent = 'Transcription error - check connection'
+      }
+
+      this.transcriptionWs.onclose = () => {
+        console.log('🔌 Transcription WebSocket closed')
+      }
+
+      // Create separate audio recorder for transcription
+      // Use only microphone for transcription (better quality)
+      const audioStream = new MediaStream([...this.micStream.getAudioTracks()])
+
+      this.audioRecorder = new MediaRecorder(audioStream, {
+        mimeType: 'audio/webm;codecs=opus',
+        audioBitsPerSecond: 128000
+      })
+
+      this.audioRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0 && this.transcriptionWs && this.transcriptionWs.readyState === WebSocket.OPEN) {
+          // Send audio chunk to transcription service
+          e.data.arrayBuffer().then(buffer => {
+            this.transcriptionWs.send(buffer)
+          })
+        }
+      }
+
+      // Send audio chunks every 1 second for real-time transcription
+      this.audioRecorder.start(1000)
+      console.log('✅ Real-time transcription started')
+
+    } catch (error) {
+      console.error('❌ Failed to start real-time transcription:', error)
+      this.transcriptDiv.textContent = 'Transcription unavailable'
+      this.transcriptDiv.style.display = 'none'
+    }
+  }
+
+  stopRealtimeTranscription() {
+    try {
+      if (this.audioRecorder && this.audioRecorder.state !== 'inactive') {
+        this.audioRecorder.stop()
+        this.audioRecorder = null
+      }
+
+      if (this.transcriptionWs) {
+        this.transcriptionWs.close()
+        this.transcriptionWs = null
+      }
+
+      console.log('🛑 Real-time transcription stopped')
+    } catch (error) {
+      console.error('❌ Error stopping transcription:', error)
     }
   }
 
@@ -967,8 +1116,15 @@ class ProfessionalRecorder {
       this.audioContext = null
     }
     this.stopStreamHealthCheck()
+    this.stopRealtimeTranscription()
     this.updateIndicator(this.audioIndicator, false)
     this.updateIndicator(this.videoIndicator, false)
+
+    // Hide transcript display
+    if (this.transcriptDiv) {
+      this.transcriptDiv.style.display = 'none'
+      this.transcriptDiv.textContent = 'Waiting for speech...'
+    }
   }
 
   startStreamHealthCheck() {
@@ -1010,6 +1166,9 @@ class ProfessionalRecorder {
         this.recording = false
         this.stopTimer()
         this.stopStreamHealthCheck()
+
+        // Stop real-time transcription
+        this.stopRealtimeTranscription()
 
         // Remove pulsing animation
         this.statusDiv.style.animation = 'none'

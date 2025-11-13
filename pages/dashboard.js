@@ -984,7 +984,7 @@ export default function Dashboard() {
                       src={selectedMeeting.downloadURL || selectedMeeting.videoUrl}
                       controls
                       autoPlay
-                      preload="metadata"
+                      preload="auto"
                       className="w-full max-w-4xl rounded-lg"
                       style={{ maxHeight: '70vh' }}
                       onError={(e) => {
