@@ -37,3 +37,17 @@ next-env.d.ts
 # recordings
 /recordings/*
 !/recordings/.gitkeep
+
+# transcription temp files
+/tmp/
+*.webm
+*.wav
+*.mp3
+
+# extension zips (generated)
+*.zip
+
+# old config files
+railway.json
+Dockerfile*
+docker-compose*.yml

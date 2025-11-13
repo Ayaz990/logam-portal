@@ -9,8 +9,6 @@
     "dev:all": "concurrently \"npm run dev\" \"npm run dev:transcription\"",
     "build": "next build",
     "start": "next start",
-    "start:transcription": "node transcription-server.js",
-    "start:all": "concurrently \"npm run start\" \"npm run start:transcription\"",
     "lint": "next lint"
   },
   "keywords": [],
