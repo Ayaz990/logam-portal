@@ -996,9 +996,9 @@ class ProfessionalRecorder {
 
       // Connect to WebSocket server
       // Auto-detect environment: use Railway in production, localhost in development
-      const PRODUCTION_WS_URL = 'wss://YOUR_RAILWAY_APP_URL'  // Update this after Railway deployment
+      const PRODUCTION_WS_URL = 'wss://logam-portal-production.up.railway.app:8081'
       const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-      const wsUrl = isDevelopment ? 'ws://localhost:8080' : PRODUCTION_WS_URL
+      const wsUrl = isDevelopment ? 'ws://localhost:8081' : PRODUCTION_WS_URL
       console.log('🔌 Connecting to:', wsUrl, `(${isDevelopment ? 'development' : 'production'})`)
 
       // Connect to WebSocket server

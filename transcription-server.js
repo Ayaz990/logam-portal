@@ -20,7 +20,7 @@ const FormData = require('form-data')
 const axios = require('axios')
 require('dotenv').config({ path: '.env.local' })
 
-const PORT = process.env.WS_PORT || 8080
+const PORT = process.env.WS_PORT || 8081
 const GROQ_API_KEY = process.env.GROQ_API_KEY
 
 if (!GROQ_API_KEY) {
