@@ -42,8 +42,7 @@
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "tailwind-merge": "^3.3.1",
-    "tailwindcss": "^3.4.18",
-    "whisper-node": "^1.1.1"
+    "tailwindcss": "^3.4.18"
   },
   "devDependencies": {
     "firebase-tools": "^14.17.0"
