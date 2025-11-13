@@ -64,7 +64,7 @@ export default function Dashboard() {
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: Home },
     { id: 'recordings', label: 'Recordings', icon: Video },
-    ...(session?.user?.role === 'admin' ? [{ id: 'bot-requests', label: 'Bot Requests', icon: Bot }] : []),
+    { id: 'bot-requests', label: 'Bot Requests', icon: Bot },
     { id: 'analytics', label: 'Analytics', icon: BarChart3 },
     { id: 'settings', label: 'Settings', icon: Settings }
   ]
@@ -137,18 +137,22 @@ export default function Dashboard() {
     return () => unsubscribe()
   }, [session])
 
-  // Fetch bot requests (admin only)
+  // Fetch bot requests (all users can see their own, admins see all)
   useEffect(() => {
-    if (!session?.user?.id || session?.user?.role !== 'admin') {
+    if (!session?.user?.id) {
       return
     }
 
-    console.log('🤖 Fetching bot requests for admin')
+    console.log('🤖 Fetching bot requests for user:', session.user.email, 'Role:', session.user.role)
 
-    const q = query(
-      collection(db, 'bot-requests'),
-      orderBy('requestedAt', 'desc')
-    )
+    // Admin sees all requests, regular users see only their own
+    const q = session.user.role === 'admin'
+      ? query(collection(db, 'bot-requests'), orderBy('requestedAt', 'desc'))
+      : query(
+          collection(db, 'bot-requests'),
+          where('userId', '==', session.user.id),
+          orderBy('requestedAt', 'desc')
+        )
 
     const unsubscribe = onSnapshot(q,
       (snapshot) => {
@@ -848,12 +852,40 @@ export default function Dashboard() {
               </div>
             )}
 
-            {/* Bot Requests Tab (Admin Only) */}
-            {activeTab === 'bot-requests' && session?.user?.role === 'admin' && (
+            {/* Bot Requests Tab */}
+            {activeTab === 'bot-requests' && (
               <>
-                <div className="mb-6">
-                  <h2 className="text-2xl font-bold mb-2">Bot Recording Requests</h2>
-                  <p className="text-black/60">Users requesting bot to join their meetings</p>
+                <div className="mb-6 flex justify-between items-start">
+                  <div>
+                    <h2 className="text-2xl font-bold mb-2">Bot Recording Requests</h2>
+                    <p className="text-black/60">
+                      {session?.user?.role === 'admin'
+                        ? 'All bot recording requests from users'
+                        : 'Your bot recording requests - Request bot to join and record your meetings'}
+                    </p>
+                  </div>
+                  {session?.user?.role !== 'admin' && botRequests.length > 0 && (
+                    <button
+                      onClick={() => {
+                        const meetingUrl = prompt('Enter Google Meet URL:')
+                        if (!meetingUrl) return
+                        const meetingName = prompt('Enter meeting name (optional):') || 'Untitled Meeting'
+
+                        fetch('/api/bot-request', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ meetingUrl, meetingName })
+                        })
+                        .then(res => res.json())
+                        .then(() => alert('✅ Bot request submitted!'))
+                        .catch(() => alert('❌ Failed to submit request'))
+                      }}
+                      className="bg-black text-white px-6 py-3 rounded-lg hover:bg-black/90 transition font-semibold flex items-center gap-2"
+                    >
+                      <Bot size={20} />
+                      New Bot Request
+                    </button>
+                  )}
                 </div>
 
                 {botRequestsLoading ? (
@@ -862,10 +894,75 @@ export default function Dashboard() {
                     <p className="mt-4 text-black/60">Loading requests...</p>
                   </div>
                 ) : botRequests.length === 0 ? (
-                  <div className="bg-white border-2 border-black rounded-xl p-12 text-center">
-                    <Bot className="mx-auto mb-4 text-black/40" size={48} />
-                    <h3 className="text-xl font-semibold mb-2">No bot requests yet</h3>
-                    <p className="text-black/60">When users request bot recording, they'll appear here</p>
+                  <div className="bg-white border-2 border-black rounded-xl p-12">
+                    <div className="text-center mb-8">
+                      <Bot className="mx-auto mb-4 text-black/40" size={48} />
+                      <h3 className="text-xl font-semibold mb-2">No bot requests yet</h3>
+                      <p className="text-black/60 mb-6">
+                        {session?.user?.role === 'admin'
+                          ? 'When users request bot recordings, they will appear here'
+                          : 'Request a bot to join and record your Google Meet meetings automatically'}
+                      </p>
+                    </div>
+
+                    {session?.user?.role !== 'admin' && (
+                      <div className="max-w-md mx-auto">
+                        <div className="bg-gray-50 rounded-lg p-6 border-2 border-gray-200">
+                          <h4 className="font-semibold mb-4">Request Bot Recording</h4>
+                          <form onSubmit={async (e) => {
+                            e.preventDefault()
+                            const formData = new FormData(e.target)
+                            const meetingUrl = formData.get('meetingUrl')
+                            const meetingName = formData.get('meetingName')
+
+                            try {
+                              const response = await fetch('/api/bot-request', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ meetingUrl, meetingName })
+                              })
+
+                              if (response.ok) {
+                                alert('✅ Bot request submitted! The bot will join your meeting shortly.')
+                                e.target.reset()
+                              } else {
+                                const error = await response.json()
+                                alert('❌ Error: ' + error.error)
+                              }
+                            } catch (error) {
+                              alert('❌ Failed to submit request')
+                            }
+                          }}>
+                            <div className="mb-4">
+                              <label className="block text-sm font-medium mb-2">Meeting URL *</label>
+                              <input
+                                type="url"
+                                name="meetingUrl"
+                                required
+                                placeholder="https://meet.google.com/xxx-xxxx-xxx"
+                                className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              />
+                            </div>
+                            <div className="mb-4">
+                              <label className="block text-sm font-medium mb-2">Meeting Name</label>
+                              <input
+                                type="text"
+                                name="meetingName"
+                                placeholder="Team Standup"
+                                className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              />
+                            </div>
+                            <button
+                              type="submit"
+                              className="w-full bg-black text-white py-3 rounded-lg hover:bg-black/90 transition font-semibold flex items-center justify-center gap-2"
+                            >
+                              <Bot size={20} />
+                              Request Bot Recording
+                            </button>
+                          </form>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="space-y-4">
