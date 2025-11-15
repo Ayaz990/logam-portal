@@ -25,7 +25,7 @@ class ProfessionalRecorder {
 
     // Real-time transcription
     this.transcriptionWs = null
-    this.transcriptionEnabled = true
+    this.transcriptionEnabled = false // Disabled for now - use post-recording transcription instead
     this.transcriptText = []
     this.audioRecorder = null
 
