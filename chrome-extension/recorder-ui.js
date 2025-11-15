@@ -1065,12 +1065,68 @@ class ProfessionalRecorder {
         }
       }
 
-      // Send audio chunks every 1 second for real-time transcription
-      this.audioRecorder.start(1000)
-      console.log('✅ Real-time transcription started')
+      // DISABLED: Using browser speech API instead (FREE!)
+      // this.audioRecorder.start(1000)
+
+      // Use browser's built-in Web Speech API (100% FREE!)
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+
+      if (!SpeechRecognition) {
+        console.error('❌ Speech recognition not supported')
+        this.transcriptDiv.textContent = 'Speech recognition not available'
+        return
+      }
+
+      this.recognition = new SpeechRecognition()
+      this.recognition.continuous = true
+      this.recognition.interimResults = true
+      this.recognition.lang = 'en-US'
+
+      this.recognition.onstart = () => {
+        console.log('✅ FREE browser speech recognition started!')
+        this.transcriptDiv.textContent = 'Listening...'
+      }
+
+      this.recognition.onresult = (event) => {
+        let interimTranscript = ''
+        let finalTranscript = ''
+
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript
+          if (event.results[i].isFinal) {
+            finalTranscript += transcript + ' '
+          } else {
+            interimTranscript += transcript
+          }
+        }
+
+        if (finalTranscript) {
+          this.transcriptText.push(finalTranscript)
+          console.log('📝 Transcript:', finalTranscript)
+        }
+
+        const recentText = this.transcriptText.slice(-5).join(' ') + ' ' + interimTranscript
+        this.transcriptDiv.textContent = recentText.trim() || 'Listening...'
+        this.transcriptDiv.scrollTop = this.transcriptDiv.scrollHeight
+      }
+
+      this.recognition.onerror = (event) => {
+        if (event.error !== 'no-speech') {
+          console.error('Speech error:', event.error)
+        }
+      }
+
+      this.recognition.onend = () => {
+        if (this.recording) {
+          setTimeout(() => this.recognition.start(), 100)
+        }
+      }
+
+      this.recognition.start()
+      console.log('✅ FREE transcription started!')
 
     } catch (error) {
-      console.error('❌ Failed to start real-time transcription:', error)
+      console.error('❌ Failed to start transcription:', error)
       this.transcriptDiv.textContent = 'Transcription unavailable'
       this.transcriptDiv.style.display = 'none'
     }
@@ -1086,6 +1142,11 @@ class ProfessionalRecorder {
       if (this.transcriptionWs) {
         this.transcriptionWs.close()
         this.transcriptionWs = null
+      }
+
+      if (this.recognition) {
+        this.recognition.stop()
+        this.recognition = null
       }
 
       console.log('🛑 Real-time transcription stopped')
