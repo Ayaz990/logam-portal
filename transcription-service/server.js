@@ -1,239 +1,145 @@
 /**
- * Standalone WebSocket Server for Real-Time Transcription
+ * Real-Time Transcription Server using Deepgram Streaming API
  *
- * This server runs separately from Next.js and provides real-time transcription
- * using Groq's Whisper API.
- *
- * Usage:
- *   node transcription-server.js
- *
- * Environment Variables Required:
- *   - GROQ_API_KEY: Your Groq API key
- *
- * The server will run on ws://localhost:8080
+ * This is how Fireflies, tldv, and other services do real-time transcription.
+ * Deepgram's streaming API is specifically designed for this use case.
  */
 
 const WebSocket = require('ws')
-const fs = require('fs')
-const path = require('path')
-const FormData = require('form-data')
-const axios = require('axios')
+const { createClient, LiveTranscriptionEvents } = require('@deepgram/sdk')
 require('dotenv').config({ path: '.env.local' })
 
 const PORT = process.env.PORT || 8080
-const GROQ_API_KEY = process.env.GROQ_API_KEY
+const DEEPGRAM_API_KEY = process.env.DEEPGRAM_API_KEY
 
-if (!GROQ_API_KEY) {
-  console.error('❌ GROQ_API_KEY not found in environment variables')
-  console.error('Please set GROQ_API_KEY in .env.local file')
+if (!DEEPGRAM_API_KEY) {
+  console.error('❌ DEEPGRAM_API_KEY not found in environment variables')
+  console.error('Please set DEEPGRAM_API_KEY in Railway')
   process.exit(1)
 }
 
-// Transcribe audio chunk using Groq Whisper API
-async function transcribeChunkWithGroq(audioFilePath) {
-  try {
-    const formData = new FormData()
-    const fileStream = fs.createReadStream(audioFilePath)
+console.log('🎤 Starting Deepgram real-time transcription server...')
+console.log('📡 This is how Fireflies and tldv do it!')
 
-    formData.append('file', fileStream, {
-      filename: 'audio.webm',
-      contentType: 'audio/webm'
-    })
-
-    formData.append('model', 'whisper-large-v3')
-    formData.append('response_format', 'verbose_json')
-    formData.append('temperature', '0')
-
-    const response = await axios.post(
-      'https://api.groq.com/openai/v1/audio/transcriptions',
-      formData,
-      {
-        headers: {
-          'Authorization': `Bearer ${GROQ_API_KEY}`,
-          ...formData.getHeaders()
-        },
-        maxContentLength: Infinity,
-        maxBodyLength: Infinity
-      }
-    )
-
-    return response.data
-  } catch (error) {
-    console.error('❌ Groq API error:', error.response?.data || error.message)
-    throw error
-  }
-}
-
-// Create WebSocket server
-console.log('🎤 Starting Groq Whisper WebSocket server...')
-
+// Create WebSocket server for clients
 const wss = new WebSocket.Server({
   port: PORT,
   perMessageDeflate: false
 })
 
-wss.on('connection', (ws) => {
-  console.log('🔗 New WebSocket connection established')
+wss.on('connection', (clientWs) => {
+  console.log('🔗 New client connected')
 
-  let audioChunks = []
-  let chunkCounter = 0
-  let processingQueue = []
-  let isProcessing = false
-  let lastTranscriptTime = Date.now()
+  // Create Deepgram client for this connection
+  const deepgram = createClient(DEEPGRAM_API_KEY)
 
-  // Process audio chunks with Groq Whisper API
-  const processAudioChunk = async (audioData) => {
-    if (isProcessing) {
-      processingQueue.push(audioData)
-      return
-    }
+  // Connect to Deepgram's streaming API
+  const dgConnection = deepgram.listen.live({
+    model: 'nova-2',           // Best accuracy
+    language: 'en',
+    smart_format: true,         // Auto punctuation and formatting
+    interim_results: true,      // Get results as user speaks
+    punctuate: true,
+    diarize: false,
+    filler_words: false,
+    utterance_end_ms: 1000
+  })
 
-    isProcessing = true
+  // Deepgram connection opened
+  dgConnection.on(LiveTranscriptionEvents.Open, () => {
+    console.log('✅ Deepgram streaming connection opened')
 
-    try {
-      // Create temporary audio file
-      const tempDir = path.join(__dirname, 'tmp', 'whisper-realtime')
-      if (!fs.existsSync(tempDir)) {
-        fs.mkdirSync(tempDir, { recursive: true })
-      }
+    // Tell client we're ready
+    clientWs.send(JSON.stringify({
+      type: 'ready',
+      message: 'Deepgram real-time transcription ready',
+      model: 'nova-2',
+      provider: 'deepgram',
+      timestamp: Date.now()
+    }))
+  })
 
-      const tempFileName = `chunk_${Date.now()}_${chunkCounter++}.webm`
-      const tempFilePath = path.join(tempDir, tempFileName)
+  // Transcription results from Deepgram (REAL-TIME!)
+  dgConnection.on(LiveTranscriptionEvents.Transcript, (data) => {
+    const transcript = data.channel?.alternatives?.[0]?.transcript
 
-      // Write audio data to temporary file
-      await fs.promises.writeFile(tempFilePath, audioData)
+    if (transcript && transcript.length > 0) {
+      const isFinal = data.is_final
+      const confidence = data.channel?.alternatives?.[0]?.confidence || 0
 
-      console.log(`🎵 Processing audio chunk: ${tempFileName} (${audioData.length} bytes)`)
+      console.log(`📝 ${isFinal ? 'FINAL' : 'interim'}: "${transcript}" (${Math.round(confidence * 100)}%)`)
 
-      // Transcribe with Groq Whisper API
-      const startTime = Date.now()
-      const result = await transcribeChunkWithGroq(tempFilePath)
-      const processingTime = Date.now() - startTime
-
-      console.log(`✅ Groq Whisper processing completed in ${processingTime}ms`)
-
-      // Extract transcript data
-      const transcriptText = result.text?.trim() || ''
-      const confidence = 0.95
-      const words = result.words || []
-      const language = result.language || 'unknown'
-
-      // Send transcript back to client if there's actual content
-      if (transcriptText && transcriptText.length > 0) {
-        const transcriptData = {
-          type: 'transcript',
-          text: transcriptText,
-          is_final: true,
-          confidence: confidence,
-          timestamp: Date.now(),
-          processing_time: processingTime,
-          model: 'whisper-large-v3',
-          language: language,
-          words: words,
-          chunk_id: chunkCounter - 1
-        }
-
-        ws.send(JSON.stringify(transcriptData))
-        console.log(`📝 Transcript sent: "${transcriptText}" (language: ${language})`)
-
-        lastTranscriptTime = Date.now()
-      }
-
-      // Clean up temporary file
-      await fs.promises.unlink(tempFilePath)
-
-      // Process next item in queue
-      if (processingQueue.length > 0) {
-        const nextChunk = processingQueue.shift()
-        setTimeout(() => processAudioChunk(nextChunk), 100)
-      } else {
-        isProcessing = false
-      }
-
-    } catch (error) {
-      console.error('❌ Groq Whisper transcription error:', error)
-      ws.send(JSON.stringify({
-        type: 'error',
-        message: 'Transcription error: ' + error.message,
-        timestamp: Date.now()
+      // Send transcript to client immediately
+      clientWs.send(JSON.stringify({
+        type: 'transcript',
+        text: transcript,
+        is_final: isFinal,
+        confidence: confidence,
+        timestamp: Date.now(),
+        model: 'nova-2',
+        provider: 'deepgram'
       }))
-      isProcessing = false
     }
-  }
+  })
 
-  // Handle incoming audio data from client
-  ws.on('message', (data) => {
+  // Deepgram errors
+  dgConnection.on(LiveTranscriptionEvents.Error, (error) => {
+    console.error('❌ Deepgram error:', error)
+    clientWs.send(JSON.stringify({
+      type: 'error',
+      message: 'Transcription error: ' + error.message,
+      timestamp: Date.now()
+    }))
+  })
+
+  // Deepgram connection closed
+  dgConnection.on(LiveTranscriptionEvents.Close, () => {
+    console.log('🔌 Deepgram connection closed')
+  })
+
+  // Metadata from Deepgram
+  dgConnection.on(LiveTranscriptionEvents.Metadata, (data) => {
+    console.log('📊 Deepgram metadata:', data)
+  })
+
+  // Handle incoming audio from client browser
+  clientWs.on('message', (audioData) => {
     try {
-      // Accumulate audio chunks for processing
-      audioChunks.push(data)
-
-      // Calculate total size of accumulated chunks
-      const totalSize = audioChunks.reduce((sum, chunk) => sum + chunk.length, 0)
-
-      // Process audio in VERY large chunks (minimum 1MB or 30 seconds)
-      // Groq needs substantial audio data to create valid files
-      const timeSinceLastTranscript = Date.now() - lastTranscriptTime
-      const shouldProcess = (totalSize >= 1000000 && audioChunks.length >= 20) || (timeSinceLastTranscript > 30000 && totalSize >= 500000)
-
-      if (shouldProcess && audioChunks.length > 0 && totalSize >= 500000) {
-        // Combine accumulated chunks into single audio buffer
-        const totalLength = audioChunks.reduce((sum, chunk) => sum + chunk.length, 0)
-        const combinedBuffer = Buffer.alloc(totalLength)
-        let offset = 0
-
-        audioChunks.forEach(chunk => {
-          combinedBuffer.set(chunk, offset)
-          offset += chunk.length
-        })
-
-        // Process the combined chunk
-        processAudioChunk(combinedBuffer)
-
-        // Reset chunk accumulator
-        audioChunks = []
+      // Forward audio chunks directly to Deepgram's streaming API
+      // This is the key difference from Groq - Deepgram handles raw streams!
+      if (dgConnection.getReadyState() === 1) {
+        dgConnection.send(audioData)
       }
     } catch (error) {
-      console.error('❌ Error handling audio data:', error)
+      console.error('❌ Error forwarding audio to Deepgram:', error)
     }
   })
 
-  // Handle client disconnect
-  ws.on('close', () => {
-    console.log('🔌 WebSocket connection closed')
-    // Clean up any remaining chunks
-    audioChunks = []
-    processingQueue = []
+  // Client disconnected
+  clientWs.on('close', () => {
+    console.log('🔌 Client disconnected')
+    dgConnection.finish()
   })
 
-  // Handle errors
-  ws.on('error', (error) => {
-    console.error('❌ WebSocket error:', error)
+  // Client errors
+  clientWs.on('error', (error) => {
+    console.error('❌ Client WebSocket error:', error)
+    dgConnection.finish()
   })
-
-  // Send ready signal
-  ws.send(JSON.stringify({
-    type: 'ready',
-    message: 'Groq Whisper-large-v3 real-time transcription started',
-    model: 'whisper-large-v3',
-    provider: 'groq',
-    language: 'auto',
-    timestamp: Date.now()
-  }))
-
-  console.log('✅ Groq Whisper connection ready')
 })
 
 wss.on('error', (error) => {
   console.error('❌ WebSocket server error:', error)
 })
 
-console.log(`✅ WebSocket server running on ws://localhost:${PORT}`)
-console.log('🎤 Groq Whisper-large-v3 ready for real-time transcription')
-console.log('📡 Waiting for connections...')
+console.log(`✅ Server running on ws://localhost:${PORT}`)
+console.log('🎤 Deepgram Nova-2 ready for INSTANT transcription')
+console.log('📡 Same technology as Fireflies and tldv!')
+console.log('⚡ Waiting for connections...')
 
 // Graceful shutdown
 process.on('SIGINT', () => {
-  console.log('\n🛑 Shutting down WebSocket server...')
+  console.log('\n🛑 Shutting down server...')
   wss.close(() => {
     console.log('✅ Server closed')
     process.exit(0)
