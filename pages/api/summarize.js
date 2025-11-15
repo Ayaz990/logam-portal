@@ -291,7 +291,23 @@ export default async function handler(req, res) {
     }
 
     console.log('🤖 Generating AI summary for meeting...')
-    const summary = await generateMeetingSummary(transcript)
+
+    // Handle both old format (object) and new format (string with speakers)
+    let transcriptToAnalyze
+    if (typeof transcript === 'string') {
+      // New format: "Speaker 1: text\n\nSpeaker 2: text"
+      transcriptToAnalyze = {
+        text: transcript,
+        words: [],
+        segments: [],
+        utterances: []
+      }
+    } else {
+      // Old format: object with text, words, segments
+      transcriptToAnalyze = transcript
+    }
+
+    const summary = await generateMeetingSummary(transcriptToAnalyze)
 
     console.log('✅ Meeting summary generated successfully')
     res.status(200).json({
