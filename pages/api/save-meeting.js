@@ -49,7 +49,8 @@ export default async function handler(req, res) {
       duration,
       isRealtime,
       status,
-      meetingId // For updating existing meetings
+      meetingId, // For updating existing meetings
+      transcription // Real-time transcription from browser
     } = req.body
 
     // Validate required fields (videoUrl not required for initial real-time creation)
@@ -102,7 +103,13 @@ export default async function handler(req, res) {
         duration: duration ? parseInt(duration) : null,
         status: status || 'pending',
         isRealtime: isRealtime || false,
-        transcript: {
+        transcript: transcription ? {
+          status: 'completed',
+          text: transcription,
+          words: [],
+          confidence: 0.9,
+          processedAt: new Date()
+        } : {
           status: isRealtime ? 'processing' : 'pending',
           text: null,
           words: [],

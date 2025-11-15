@@ -1261,6 +1261,39 @@ class ProfessionalRecorder {
     }
   }
 
+  formatTranscriptionWithSpeakers(transcriptArray) {
+    if (!transcriptArray || transcriptArray.length === 0) {
+      return null
+    }
+
+    // Simple speaker detection based on pauses
+    // When there's a significant pause, we assume a new speaker
+    const formatted = []
+    let currentSpeaker = 1
+    let lastSegmentTime = Date.now()
+
+    transcriptArray.forEach((segment, index) => {
+      const now = Date.now()
+      const timeSinceLastSegment = now - lastSegmentTime
+
+      // If more than 3 seconds pause, likely a new speaker
+      if (timeSinceLastSegment > 3000 && index > 0) {
+        currentSpeaker = currentSpeaker === 1 ? 2 : 1 // Alternate between Speaker 1 and 2
+      }
+
+      formatted.push({
+        speaker: `Speaker ${currentSpeaker}`,
+        text: segment.trim(),
+        timestamp: now
+      })
+
+      lastSegmentTime = now
+    })
+
+    // Convert to formatted string for display
+    return formatted.map(item => `${item.speaker}: ${item.text}`).join('\n\n')
+  }
+
   async uploadToFirebase() {
     try {
       console.log('📤 Starting direct Firebase upload...')
@@ -1307,6 +1340,9 @@ class ProfessionalRecorder {
       // Now save metadata to Firestore via API
       console.log('💾 Saving meeting metadata...')
 
+      // Format transcription with speaker detection
+      const transcription = this.formatTranscriptionWithSpeakers(this.transcriptText)
+
       const metadataResponse = await fetch(`${this.apiUrl}/api/save-meeting`, {
         method: 'POST',
         headers: {
@@ -1322,7 +1358,8 @@ class ProfessionalRecorder {
           fileSize: blob.size,
           mimeType: 'video/webm',
           meetingName: meetingName,
-          duration: Date.now() - this.startTime
+          duration: Date.now() - this.startTime,
+          transcription: transcription
         })
       })
 
