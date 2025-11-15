@@ -25,7 +25,7 @@ class ProfessionalRecorder {
 
     // Real-time transcription
     this.transcriptionWs = null
-    this.transcriptionEnabled = false // Disabled for now - use post-recording transcription instead
+    this.transcriptionEnabled = true // Enabled with Groq (30-second delays for larger chunks)
     this.transcriptText = []
     this.audioRecorder = null
 

@@ -170,12 +170,12 @@ wss.on('connection', (ws) => {
       // Calculate total size of accumulated chunks
       const totalSize = audioChunks.reduce((sum, chunk) => sum + chunk.length, 0)
 
-      // Process audio in larger chunks (minimum 100KB or 10 seconds)
-      // This ensures we send complete, valid audio files to Groq
+      // Process audio in VERY large chunks (minimum 1MB or 30 seconds)
+      // Groq needs substantial audio data to create valid files
       const timeSinceLastTranscript = Date.now() - lastTranscriptTime
-      const shouldProcess = (totalSize >= 100000 && audioChunks.length >= 5) || timeSinceLastTranscript > 10000
+      const shouldProcess = (totalSize >= 1000000 && audioChunks.length >= 20) || (timeSinceLastTranscript > 30000 && totalSize >= 500000)
 
-      if (shouldProcess && audioChunks.length > 0 && totalSize >= 50000) {
+      if (shouldProcess && audioChunks.length > 0 && totalSize >= 500000) {
         // Combine accumulated chunks into single audio buffer
         const totalLength = audioChunks.reduce((sum, chunk) => sum + chunk.length, 0)
         const combinedBuffer = Buffer.alloc(totalLength)
