@@ -51,3 +51,7 @@ next-env.d.ts
 railway.json
 Dockerfile*
 docker-compose*.yml
+
+# env variable files (use Vercel/Railway dashboards instead)
+VERCEL_ENV_VARIABLES.txt
+*_ENV_*.txt
