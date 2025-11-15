@@ -854,8 +854,7 @@ class ProfessionalRecorder {
             echoCancellation: false,
             noiseSuppression: false,
             autoGainControl: false
-          },
-          preferCurrentTab: true
+          }
         })
       } catch (screenError) {
         // Clean up mic
